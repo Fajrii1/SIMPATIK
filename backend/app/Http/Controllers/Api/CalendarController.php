@@ -78,9 +78,11 @@ class CalendarController extends Controller
                     'status' => $activity->status,
                     'assignments_count' => $activity->assignments->count(),
                     'assigned_users' => $activity->assignments->map(fn ($a) => [
-                        'user_id' => $a->user_id,
-                        'nama' => $a->user?->nama,
-                        'peran' => $a->peran,
+                    'user_id' => $a->user_id,
+                    'nama' => $a->user?->nama,
+                    'peran' => $a->peran,
+                    'mulai' => $a->getEffectiveMulai()?->format('Y-m-d'),
+                    'selesai' => $a->getEffectiveSelesai()?->format('Y-m-d'),
                     ]),
                 ],
             ];
