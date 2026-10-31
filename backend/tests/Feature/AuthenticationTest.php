@@ -220,23 +220,39 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * Uji pengguna dengan kewajiban must_change_password diblokir dari endpoint /api/me (403).
+     * Uji pengguna dengan kewajiban must_change_password tetap bisa membaca profilnya (/api/me)
+     * agar frontend dapat mengarahkan ke halaman ganti kata sandi, tetapi endpoint lain diblokir.
      */
-    public function test_user_with_must_change_password_is_blocked_from_me_endpoint(): void
+    public function test_user_with_must_change_password_can_read_profile_but_not_other_endpoints(): void
     {
-        $kepala = User::where('email', 'kepala@contoh.test')->first();
-        $this->assertNotNull($kepala);
-        $this->assertTrue((bool) $kepala->must_change_password);
+        $tempUser = User::create([
+            'nama' => 'Pengguna Wajib Sandi',
+            'email' => 'uji_wajib_sandi@contoh.test',
+            'password' => 'password-awal',
+            'peran' => PeranPengguna::PEGAWAI,
+            'nip' => '199999992020011099',
+            'jabatan' => 'Statistisi Pertama',
+            'aktif' => true,
+            'must_change_password' => true,
+        ]);
 
-        Sanctum::actingAs($kepala);
+        try {
+            Sanctum::actingAs($tempUser);
 
-        $response = $this->getJson('/api/me');
+            $this->getJson('/api/me')
+                ->assertStatus(200)
+                ->assertJsonPath('user.email', 'uji_wajib_sandi@contoh.test')
+                ->assertJsonPath('user.must_change_password', true);
 
-        $response->assertStatus(403)
-            ->assertJson([
-                'message' => 'Anda harus mengganti kata sandi terlebih dahulu.',
-                'must_change_password' => true,
-            ]);
+            $this->getJson('/api/dashboard')
+                ->assertStatus(403)
+                ->assertJson([
+                    'message' => 'Anda harus mengganti kata sandi terlebih dahulu.',
+                    'must_change_password' => true,
+                ]);
+        } finally {
+            $tempUser->forceDelete();
+        }
     }
 
     /**
@@ -261,8 +277,11 @@ class AuthenticationTest extends TestCase
         try {
             Sanctum::actingAs($tempUser);
 
-            // Akses /me sebelum ganti kata sandi -> 403
-            $this->getJson('/api/me')->assertStatus(403);
+            // Profil tetap terbaca, tetapi akses modul lain diblokir sebelum ganti kata sandi
+            $this->getJson('/api/me')
+                ->assertStatus(200)
+                ->assertJsonPath('user.must_change_password', true);
+            $this->getJson('/api/dashboard')->assertStatus(403);
 
             // Ganti kata sandi dengan data valid
             $response = $this->postJson('/api/change-password', [

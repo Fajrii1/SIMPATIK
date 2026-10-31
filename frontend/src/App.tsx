@@ -14,12 +14,14 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 
 // Proteksi Rute Terautentikasi
-const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({
-  children,
-  adminOnly = false,
-}) => {
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode;
+  adminOnly?: boolean;
+  allowPendingPassword?: boolean;
+}> = ({ children, adminOnly = false, allowPendingPassword = false }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -32,6 +34,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean 
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Pengguna yang wajib ganti kata sandi diarahkan ke halaman khusus sebelum masuk aplikasi.
+  if (user.must_change_password && !allowPendingPassword) {
+    return <Navigate to="/ganti-sandi" replace />;
   }
 
   if (adminOnly && user.peran !== 'admin') {
@@ -47,6 +54,15 @@ export const App: React.FC = () => {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+
+          <Route
+            path="/ganti-sandi"
+            element={
+              <ProtectedRoute allowPendingPassword>
+                <ChangePasswordPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             element={

@@ -40,7 +40,8 @@ class UserSeeder extends Seeder
                 'nip' => '197505121998031002',
                 'jabatan' => 'Kepala BPS Kota Palembang',
                 'aktif' => true,
-                'must_change_password' => true,
+                // Akun demo langsung dapat dipakai; akun buatan admin tetap wajib ganti sandi.
+                'must_change_password' => false,
             ]
         );
 
@@ -63,7 +64,7 @@ class UserSeeder extends Seeder
                     'nip' => '1985010'.$i.'200801100'.$i,
                     'jabatan' => $data['jabatan'],
                     'aktif' => true,
-                    'must_change_password' => true,
+                    'must_change_password' => false,
                 ]
             );
         }
@@ -80,7 +81,7 @@ class UserSeeder extends Seeder
                     'nip' => '199002'.$formattedIndex.'20150210'.$formattedIndex,
                     'jabatan' => 'Statistisi Terampil',
                     'aktif' => true,
-                    'must_change_password' => true,
+                    'must_change_password' => false,
                 ]
             );
         }

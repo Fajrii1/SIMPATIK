@@ -136,7 +136,7 @@ Pemeriksaan data langsung pada database `jadwal_bps` menghasilkan verifikasi seb
 
 1. **Pengguna (`users`): 17 rekod**
    - 1 Admin: `admin@contoh.test` (`must_change_password = 0`).
-   - 1 Pimpinan: `kepala@contoh.test` (`must_change_password = 1`).
+   - 1 Pimpinan: `kepala@contoh.test` (`must_change_password = 0`, akun demo siap login).
    - 5 Ketua Tim (Pegawai): `ketua1@contoh.test` s.d. `ketua5@contoh.test`.
    - 10 Staf Pegawai: `pegawai01@contoh.test` s.d. `pegawai10@contoh.test`.
    - Kata sandi dummy seluruh akun fiktif: `password` (bcrypt hash).

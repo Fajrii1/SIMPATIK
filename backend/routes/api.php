@@ -29,10 +29,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
 
+    // Profil tetap dapat diakses agar frontend tahu status sesi dan kewajiban ganti kata sandi.
+    Route::get('/me', [AuthController::class, 'me']);
+
     // Endpoint Terproteksi Kewajiban Ganti Kata Sandi
     Route::middleware('password.changed')->group(function () {
-        Route::get('/me', [AuthController::class, 'me']);
-
         // Dashboard Adaptif Multi-Role
         Route::get('dashboard', [DashboardController::class, 'index']);
 

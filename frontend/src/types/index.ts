@@ -51,6 +51,8 @@ export interface Team {
   keterangan?: string;
   ketua_id?: number | null;
   ketua?: User | null;
+  aktif?: boolean;
+  members_count?: number;
   members?: User[];
 }
 

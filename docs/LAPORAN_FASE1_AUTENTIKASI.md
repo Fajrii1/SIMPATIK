@@ -228,13 +228,13 @@ Seluruh akun dummy yang dihasilkan oleh `UserSeeder` memiliki kata sandi awal: `
 | No | Nama | Email | Peran | NIP | `must_change_password` | Keterangan |
 |:--:|---|---|---|---|:--:|---|
 | 1 | Administrator BPS | `admin@contoh.test` | `admin` | `198001012005011001` | `false` | Akun admin utama, siap login langsung |
-| 2 | Kepala BPS Palembang | `kepala@contoh.test` | `pimpinan` | `197505121998031002` | `true` | Pimpinan & Ketua Tim 06, wajib ganti sandi saat login pertama |
-| 3 | Ketua Tim 01 | `ketua1@contoh.test` | `pegawai` | `198501012008011001` | `true` | Ketua Tim Statistik Sosial |
-| 4 | Ketua Tim 02 | `ketua2@contoh.test` | `pegawai` | `198501022008011002` | `true` | Ketua Tim Statistik Produksi |
-| 5 | Ketua Tim 03 | `ketua3@contoh.test` | `pegawai` | `198501032008011003` | `true` | Ketua Tim Statistik Distribusi |
-| 6 | Ketua Tim 04 | `ketua4@contoh.test` | `pegawai` | `198501042008011004` | `true` | Ketua Tim Nerwilis |
-| 7 | Ketua Tim 05 | `ketua5@contoh.test` | `pegawai` | `198501052008011005` | `true` | Ketua Tim IPDS |
-| 8–17 | Pegawai 01 s.d. 10 | `pegawai01@contoh.test` s/d `pegawai10@contoh.test` | `pegawai` | `19900201...` | `true` | Anggota tim, wajib ganti sandi saat login pertama |
+| 2 | Kepala BPS Palembang | `kepala@contoh.test` | `pimpinan` | `197505121998031002` | `false` | Pimpinan & Ketua Tim 06, akun demo siap login |
+| 3 | Ketua Tim 01 | `ketua1@contoh.test` | `pegawai` | `198501012008011001` | `false` | Ketua Tim Statistik Sosial |
+| 4 | Ketua Tim 02 | `ketua2@contoh.test` | `pegawai` | `198501022008011002` | `false` | Ketua Tim Statistik Produksi |
+| 5 | Ketua Tim 03 | `ketua3@contoh.test` | `pegawai` | `198501032008011003` | `false` | Ketua Tim Statistik Distribusi |
+| 6 | Ketua Tim 04 | `ketua4@contoh.test` | `pegawai` | `198501042008011004` | `false` | Ketua Tim Nerwilis |
+| 7 | Ketua Tim 05 | `ketua5@contoh.test` | `pegawai` | `198501052008011005` | `false` | Ketua Tim IPDS |
+| 8–17 | Pegawai 01 s.d. 10 | `pegawai01@contoh.test` s/d `pegawai10@contoh.test` | `pegawai` | `19900201...` | `false` | Anggota tim, akun demo siap login |
 
 ---
 
@@ -252,8 +252,8 @@ Berkas pengujian dibuat di `backend/tests/Feature/AuthenticationTest.php` mencak
 7. `test_login_rate_limiting_triggers_after_max_attempts` — Pembatasan percobaan login pada upaya ke-6 (429) [PASS]
 8. `test_unauthenticated_access_to_protected_endpoints_is_rejected` — Akses tanpa login ke `/me`, `/logout`, `/change-password` ditolak (401) [PASS]
 9. `test_authenticated_user_can_access_me_endpoint` — Pengguna terautentikasi dapat mengakses `/me` (200) [PASS]
-10. `test_user_with_must_change_password_is_blocked_from_me_endpoint` — Pengguna `must_change_password = true` diblokir dari `/me` (403) [PASS]
-11. `test_must_change_password_flow_and_subsequent_access` — Alur lengkap: blokir `/me` -> akses ganti sandi -> sandi ter-hash -> `must_change_password = false` -> akses `/me` terbuka (200) [PASS]
+10. `test_user_with_must_change_password_can_read_profile_but_not_other_endpoints` — Pengguna `must_change_password = true` tetap dapat membaca `/me` (200), tetapi dashboard diblokir (403) [PASS]
+11. `test_must_change_password_flow_and_subsequent_access` — Alur lengkap: profil terbaca -> akses ganti sandi -> sandi ter-hash -> `must_change_password = false` -> seluruh endpoint terbuka [PASS]
 12. `test_change_password_fails_if_current_password_is_incorrect` — Kata sandi saat ini salah ditolak (422) [PASS]
 13. `test_change_password_fails_if_new_password_is_too_short` — Kata sandi baru < 8 karakter ditolak (422) [PASS]
 14. `test_change_password_fails_if_confirmation_does_not_match` — Konfirmasi kata sandi tidak cocok ditolak (422) [PASS]

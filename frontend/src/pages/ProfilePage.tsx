@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { User, Lock, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, Check, AlertCircle } from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('');
@@ -19,9 +19,10 @@ export const ProfilePage: React.FC = () => {
     try {
       await api.post('/change-password', {
         current_password: currentPassword,
-        new_password: newPassword,
-        new_password_confirmation: newPasswordConfirmation,
+        password: newPassword,
+        password_confirmation: newPasswordConfirmation,
       });
+      await refreshUser();
       setMessage({ text: 'Kata sandi Anda berhasil diperbarui.', type: 'success' });
       setCurrentPassword('');
       setNewPassword('');
