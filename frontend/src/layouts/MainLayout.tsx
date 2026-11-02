@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Outlet, Link, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Calendar,
@@ -15,14 +15,21 @@ import {
   FileSpreadsheet,
   Menu,
   X,
+  User as UserIcon,
 } from "lucide-react";
 import api from "../services/api";
 
 export const MainLayout: React.FC = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   const fetchUnread = async () => {
     try {
@@ -42,13 +49,14 @@ export const MainLayout: React.FC = () => {
   // Close drawer on escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && drawerOpen) {
+      if (e.key === "Escape") {
         setDrawerOpen(false);
+        setProfileOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [drawerOpen]);
+  }, []);
 
   // Prevent background scroll when mobile drawer is open
   useEffect(() => {
@@ -57,7 +65,23 @@ export const MainLayout: React.FC = () => {
     } else {
       document.body.style.overflow = "unset";
     }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
   }, [drawerOpen]);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    if (profileOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileOpen]);
 
   const mainNavItems = [
     { label: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -78,6 +102,117 @@ export const MainLayout: React.FC = () => {
     setDrawerOpen(false);
   };
 
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } finally {
+      setLoggingOut(false);
+      setConfirmLogout(false);
+    }
+  };
+
+  const initials = user?.nama
+    ? user.nama
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .substring(0, 2)
+        .toUpperCase()
+    : "BPS";
+
+  const sidebarWidth = collapsed ? "w-20" : "w-64";
+
+  const renderNavItem = (item: { label: string; path: string; icon: React.ComponentType<{ className?: string }> }, compact: boolean) => {
+    const Icon = item.icon;
+    const isActive =
+      location.pathname === item.path ||
+      (item.path !== "/" && location.pathname.startsWith(item.path));
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        onClick={(event) => {
+          event.stopPropagation();
+          handleNavClick();
+        }}
+        title={compact ? item.label : undefined}
+        className={`flex items-center gap-3 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
+          compact ? "justify-center px-2" : "px-3.5"
+        } ${
+          isActive
+            ? "bg-sky-600 text-white shadow-sm"
+            : "text-slate-300 hover:bg-slate-800 hover:text-white"
+        }`}
+      >
+        <Icon className="w-5 h-5 shrink-0" />
+        {!compact && <span className="truncate">{item.label}</span>}
+      </Link>
+    );
+  };
+
+  const sidebarContent = (compact: boolean) => (
+    <>
+      {/* Brand Header */}
+      <div
+        className={`border-b border-slate-800 flex items-center ${
+          compact ? "justify-center p-3" : "justify-between p-4 sm:p-5 gap-3"
+        }`}
+      >
+        <div className={`flex items-center ${compact ? "justify-center" : "gap-3"}`}>
+          <img
+            src="/LogoBPS2.png"
+            alt="Logo BPS"
+            className={`${compact ? "w-8 h-8" : "w-12 h-12"} object-contain flex-shrink-0`}
+          />
+          {!compact && (
+            <div className="min-w-0">
+              <h1 className="font-bold text-sm tracking-wide text-white leading-tight">
+                SIMPATIK
+              </h1>
+              <p className="text-xs text-sky-400 font-medium">
+                Sistem Penjadwalan & Monitoring Kegiatan Statistik
+              </p>
+            </div>
+          )}
+        </div>
+        {/* Close drawer button for mobile */}
+        <button
+          onClick={() => setDrawerOpen(false)}
+          aria-label="Tutup menu sidebar"
+          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
+        >
+          <X className="w-5 h-5" />
+        </button>
+        {/* Tidak menggunakan tombol panah; sidebar diperkecil dengan mengklik area sidebar. */}
+      </div>
+
+      {/* Sidebar yang diperkecil dapat diperbesar dengan mengklik areanya. */}
+
+      {/* Navigation Items */}
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto no-scrollbar">
+        {!compact && (
+          <p className="px-3.5 mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+            Main Menu
+          </p>
+        )}
+        {mainNavItems.map((item) => renderNavItem(item, compact))}
+
+        {user?.peran === "admin" && (
+          <div className="mt-6 space-y-1">
+            {!compact && (
+              <p className="px-3.5 mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+                Administration
+              </p>
+            )}
+            {adminNavItems.map((item) => renderNavItem(item, compact))}
+          </div>
+        )}
+      </nav>
+    </>
+  );
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Mobile Drawer Backdrop Overlay */}
@@ -94,139 +229,49 @@ export const MainLayout: React.FC = () => {
         />
       )}
 
-      {/* Sidebar: Drawer on mobile/tablet (<1024px), Static left sidebar on desktop (>=1024px) */}
+      {/* Sidebar: Drawer on mobile, collapsible on desktop */}
       <aside
-        className={`fixed lg:static top-0 bottom-0 left-0 z-50 w-72 lg:w-64 bg-slate-900 text-slate-100 flex flex-col border-r border-slate-800 transform transition-transform duration-300 ease-in-out ${
+        onClick={() => {
+          if (!drawerOpen) setCollapsed((value) => !value);
+        }}
+        className={`fixed lg:static top-0 bottom-0 left-0 z-50 ${sidebarWidth} bg-slate-900 text-slate-100 flex flex-col border-r border-slate-800 transform transition-all duration-300 ease-in-out ${
           drawerOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        } ${collapsed && !drawerOpen ? "cursor-pointer" : ""}`}
       >
-        {/* Brand Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src="/LogoBPS2.png"
-              alt="Logo BPS"
-              className="w-12 h-12 object-contain flex-shrink-0"
-            />
-            <div>
-              <h1 className="font-bold text-sm tracking-wide text-white leading-tight">
-                SIMPATIK
-              </h1>
-              <p className="text-xs text-sky-400 font-medium">
-                Sistem Penjadwalan & Monitoring Kegiatan Statistik
-              </p>
-            </div>
-          </div>
-          {/* Close drawer button for mobile */}
-          <button
-            onClick={() => setDrawerOpen(false)}
-            aria-label="Tutup menu sidebar"
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar">
-          {/* --- BAGIAN MAIN MENU --- */}
-          <p className="px-3.5 mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">
-            Main Menu
-          </p>
-          {mainNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              location.pathname === item.path ||
-              (item.path !== "/" && location.pathname.startsWith(item.path));
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={handleNavClick}
-                className={`flex items-center gap-3 px-3.5 py-3 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
-                  isActive
-                    ? "bg-sky-600 text-white shadow-sm"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-
-          {/* --- BAGIAN ADMINISTRATION (Hanya Muncul Jika Admin) --- */}
-          {user?.peran === "admin" && (
-            <div className="mt-8 space-y-1">
-              <p className="px-3.5 mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">
-                Administration
-              </p>
-              {adminNavItems.map((item) => {
-                const Icon = item.icon;
-                const isActive =
-                  location.pathname === item.path ||
-                  (item.path !== "/" &&
-                    location.pathname.startsWith(item.path));
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={handleNavClick}
-                    className={`flex items-center gap-3 px-3.5 py-3 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
-                      isActive
-                        ? "bg-sky-600 text-white shadow-sm"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 shrink-0" />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </nav>
-
-        {/* User profile footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1 mr-2">
-              <p className="text-sm font-semibold text-white truncate">
-                {user?.nama}
-              </p>
-              <p className="text-xs text-slate-400 capitalize">{user?.peran}</p>
-            </div>
-            <button
-              onClick={() => logout()}
-              title="Keluar"
-              aria-label="Keluar dari akun"
-              className="p-2.5 rounded-lg hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+        {sidebarContent(drawerOpen ? false : collapsed)}
       </aside>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Navbar */}
-        <header className="h-16 bg-slate-900 border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-xs">
+        <header className="h-16 bg-slate-900 border-b border-slate-800 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-xs">
           <div className="flex items-center gap-3">
             {/* Hamburger button on Mobile/Tablet */}
             <button
               onClick={() => setDrawerOpen(true)}
               aria-label="Buka menu navigasi"
-              className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <Menu className="w-6 h-6" />
             </button>
+
+            {/* Judul aplikasi pindah ke navbar saat sidebar diperkecil */}
+            {collapsed && !drawerOpen && (
+              <div className="flex flex-col leading-tight">
+                <span className="font-bold text-sm tracking-wide text-white">
+                  SIMPATIK
+                </span>
+                <span className="text-[10px] text-sky-400 font-medium">
+                  Sistem Penjadwalan & Monitoring Kegiatan Statistik
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
               to="/notifications"
-              className="relative p-2.5 rounded-full hover:bg-slate-100 text-slate-600 transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="relative p-2.5 rounded-full hover:bg-slate-800 text-white transition min-h-[44px] min-w-[44px] flex items-center justify-center"
               title="Notifikasi"
               aria-label="Lihat Notifikasi"
             >
@@ -238,17 +283,63 @@ export const MainLayout: React.FC = () => {
               )}
             </Link>
 
-            <Link
-              to="/profile"
-              className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200 text-sm font-medium text-white hover:text-sky-600 min-h-[44px]"
-            >
-              <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-xs shrink-0">
-                {user?.nama ? user.nama.substring(0, 2).toUpperCase() : "BPS"}
-              </div>
-              <span className="hidden md:inline truncate max-w-[120px]">
-                {user?.nama}
-              </span>
-            </Link>
+            {/* Profile dropdown */}
+            <div className="relative" ref={profileRef}>
+              <button
+                onClick={() => setProfileOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                className="group flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-700 text-sm font-medium text-white hover:text-sky-300 min-h-[44px] rounded-lg px-2 transition-colors duration-200"
+              >
+                <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-xs shrink-0">
+                  {initials}
+                </div>
+                <div className="hidden md:flex flex-col items-start leading-tight">
+                  <span className="truncate max-w-[120px] text-white transition-colors duration-200 group-hover:text-sky-300">
+                    {user?.nama}
+                  </span>
+                  <span className="text-[10px] text-slate-300 capitalize transition-colors duration-200 group-hover:text-sky-300">
+                    {user?.peran}
+                  </span>
+                </div>
+              </button>
+
+              {profileOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-60 rounded-xl border border-slate-200 bg-white shadow-lg z-50 overflow-hidden"
+                >
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-800 truncate">
+                      {user?.nama}
+                    </p>
+                    <p className="text-xs text-slate-500 capitalize">{user?.peran}</p>
+                  </div>
+                  <div className="py-1">
+                    <Link
+                      to="/profile"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                      role="menuitem"
+                    >
+                      <UserIcon className="w-4 h-4" />
+                      Pengaturan
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setProfileOpen(false);
+                        setConfirmLogout(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50"
+                      role="menuitem"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Keluar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -257,6 +348,34 @@ export const MainLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Logout confirmation dialog */}
+      {confirmLogout && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-base font-bold text-slate-800">Konfirmasi Keluar</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Apakah Anda yakin ingin keluar dari aplikasi?
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmLogout(false)}
+                disabled={loggingOut}
+                className="px-4 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="px-4 py-2 text-sm rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {loggingOut ? "Memproses..." : "Keluar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
