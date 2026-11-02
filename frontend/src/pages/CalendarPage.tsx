@@ -492,15 +492,17 @@ export const CalendarPage: React.FC = () => {
 
       {loading ? (
         <CalendarSkeleton />
-      ) : error ? null : filteredEvents.length === 0 ? (
-        <EmptyState
-          hasActiveFilters={hasActiveFilters}
-          onReset={resetFilters}
-          year={year}
-          hasEvents={events.length > 0}
-        />
-      ) : (
+      ) : error ? null : (
         <>
+          {filteredEvents.length === 0 && (
+            <EmptyState
+              hasActiveFilters={hasActiveFilters}
+              onReset={resetFilters}
+              year={year}
+              hasEvents={events.length > 0}
+            />
+          )}
+
           {activeTab === 'heatmap' && (
             <HeatmapTab
               year={year}

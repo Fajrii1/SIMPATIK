@@ -111,11 +111,19 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
         </div>
       </div>
 
-      {events.length === 0 ? (
-        <EmptyState hasActiveFilters={hasActiveFilters} onResetFilters={onResetFilters} />
-      ) : (
-        <>
-          {/* Tampilan mobile: tiap bulan berupa grid 7 kolom agar tanggal mudah disentuh. */}
+      <>
+        {events.length === 0 && (
+          <div
+            className="rounded-lg border border-dashed border-[#E3EEFA] px-4 py-3 text-center text-xs"
+            style={{ color: PALETTE.slate }}
+          >
+            {hasActiveFilters
+              ? 'Tidak ada kegiatan yang cocok dengan filter. Heatmap tetap ditampilkan dengan intensitas 0.'
+              : 'Belum ada kegiatan pada tahun ini. Heatmap ditampilkan dengan intensitas 0.'}
+          </div>
+        )}
+
+        {/* Tampilan mobile: tiap bulan berupa grid 7 kolom agar tanggal mudah disentuh. */}
           <div className="space-y-3 sm:hidden">
             <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-semibold" style={{ color: PALETTE.slate }}>
               {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((label, index) => (
@@ -242,7 +250,6 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
           })}
           </div>
         </>
-      )}
 
       {dayDetail && (
         <div
