@@ -13,65 +13,34 @@ class TeamSeeder extends Seeder
      */
     public function run(): void
     {
-        $kepala = User::where('email', 'kepala@contoh.test')->first();
-        $ketua1 = User::where('email', 'ketua1@contoh.test')->first();
-        $ketua2 = User::where('email', 'ketua2@contoh.test')->first();
-        $ketua3 = User::where('email', 'ketua3@contoh.test')->first();
-        $ketua4 = User::where('email', 'ketua4@contoh.test')->first();
-        $ketua5 = User::where('email', 'ketua5@contoh.test')->first();
-
-        // 6 Tim Kerja Statistik BPS Kota Palembang
+        // Enam tim kerja statistik BPS Kota Palembang (nama kanonik).
+        // Seeder development hanya membuat tim, tanpa ketua dan anggota;
+        // ketua tim ditentukan admin setelah pegawai ditambahkan.
         $teamsDefinition = [
-            [
-                'nama' => 'Tim Sosial',
-                'ketua_id' => $ketua1?->id,
-                'aktif' => true,
-                'members' => ['pegawai01@contoh.test', 'pegawai02@contoh.test', 'pegawai03@contoh.test', 'ketua1@contoh.test'],
-            ],
-            [
-                'nama' => 'Tim Produksi',
-                'ketua_id' => $ketua2?->id,
-                'aktif' => true,
-                'members' => ['pegawai02@contoh.test', 'pegawai04@contoh.test', 'pegawai05@contoh.test', 'ketua2@contoh.test'],
-            ],
-            [
-                'nama' => 'Tim Distribusi',
-                'ketua_id' => $ketua3?->id,
-                'aktif' => true,
-                'members' => ['pegawai05@contoh.test', 'pegawai06@contoh.test', 'pegawai07@contoh.test', 'ketua3@contoh.test'],
-            ],
-            [
-                'nama' => 'Tim Neraca dan Analisis',
-                'ketua_id' => $ketua4?->id,
-                'aktif' => true,
-                'members' => ['pegawai07@contoh.test', 'pegawai08@contoh.test', 'pegawai09@contoh.test', 'ketua4@contoh.test'],
-            ],
-            [
-                'nama' => 'Tim IPDS',
-                'ketua_id' => $ketua5?->id,
-                'aktif' => true,
-                'members' => ['pegawai09@contoh.test', 'pegawai10@contoh.test', 'ketua5@contoh.test'],
-            ],
-            [
-                'nama' => 'Tim Pelayanan Statistik',
-                'ketua_id' => $kepala?->id, // Kepala merangkap ketua tim ini
-                'aktif' => true,
-                'members' => ['pegawai01@contoh.test', 'pegawai03@contoh.test', 'pegawai10@contoh.test', 'kepala@contoh.test'],
-            ],
+            ['nama' => 'Umum', 'aliases' => ['Tim Pelayanan Statistik', 'Umum']],
+            ['nama' => 'Sosial', 'aliases' => ['Tim Sosial', 'Sosial']],
+            ['nama' => 'Produksi', 'aliases' => ['Tim Produksi', 'Produksi']],
+            ['nama' => 'Distribusi', 'aliases' => ['Tim Distribusi', 'Distribusi']],
+            ['nama' => 'NWAS', 'aliases' => ['Tim Neraca dan Analisis', 'NWAS']],
+            ['nama' => 'IPDS', 'aliases' => ['Tim IPDS', 'IPDS']],
         ];
 
         foreach ($teamsDefinition as $data) {
-            $team = Team::updateOrCreate(
-                ['nama' => $data['nama']],
-                [
-                    'ketua_id' => $data['ketua_id'],
-                    'aktif' => $data['aktif'],
-                ]
-            );
+            $team = Team::whereIn('nama', $data['aliases'])->first();
 
-            // Sync keanggotaan tim
-            $userIds = User::whereIn('email', $data['members'])->pluck('id')->toArray();
-            $team->members()->syncWithoutDetaching($userIds);
+            if ($team) {
+                $team->update([
+                    'nama' => $data['nama'],
+                    'ketua_id' => null,
+                    'aktif' => true,
+                ]);
+            } else {
+                Team::create([
+                    'nama' => $data['nama'],
+                    'ketua_id' => null,
+                    'aktif' => true,
+                ]);
+            }
         }
     }
 }

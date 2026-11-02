@@ -57,12 +57,12 @@ class DatabaseDataIntegrityTest extends TestCase
     public function test_teams_seeder_data_integrity(): void
     {
         $expectedTeams = [
-            'Tim Sosial',
-            'Tim Produksi',
-            'Tim Distribusi',
-            'Tim Neraca dan Analisis',
-            'Tim IPDS',
-            'Tim Pelayanan Statistik',
+            'Sosial',
+            'Produksi',
+            'Distribusi',
+            'NWAS',
+            'IPDS',
+            'Umum',
         ];
 
         foreach ($expectedTeams as $teamName) {
@@ -72,8 +72,8 @@ class DatabaseDataIntegrityTest extends TestCase
             $this->assertGreaterThan(0, $team->members()->count(), "Tim [{$teamName}] harus memiliki anggota.");
         }
 
-        // Kepala merangkap ketua Tim Pelayanan Statistik
-        $pelayanan = Team::where('nama', 'Tim Pelayanan Statistik')->first();
+        // Kepala merangkap ketua Tim Umum
+        $pelayanan = Team::where('nama', 'Umum')->first();
         $kepala = User::where('email', 'kepala@contoh.test')->first();
         $this->assertEquals($kepala->id, $pelayanan->ketua_id);
         $this->assertTrue($kepala->isKetuaOf($pelayanan));
