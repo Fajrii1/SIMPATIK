@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\PeranPengguna;
 use App\Models\Activity;
-use App\Models\Assignment;
 use App\Models\Team;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
@@ -191,7 +190,7 @@ class CalendarTest extends TestCase
                 ->assertStatus(200);
 
             // 5. Data penugasan efektif tersedia di event
-            $detail = $this->getJson("/api/calendar?start=2026-10-01&end=2026-10-31&search=Filter Pegawai Kalender");
+            $detail = $this->getJson('/api/calendar?start=2026-10-01&end=2026-10-31&search=Filter Pegawai Kalender');
             $event = collect($detail->json('events'))->firstWhere('extendedProps.activity_id', $activity->id);
             $this->assertNotNull($event);
             $this->assertSame('Keterangan uji filter pegawai', $event['extendedProps']['keterangan']);

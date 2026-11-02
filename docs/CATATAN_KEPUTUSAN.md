@@ -64,6 +64,18 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
 - **Keputusan:**
   - Menggunakan tipe native `$table->json('sebelum')->nullable()` dan `$table->json('sesudah')->nullable()` pada migration Laravel.
   - Pada MariaDB/MySQL bawaan XAMPP, tipe ini diimplementasikan secara native dengan validasi format JSON otomatis.
+
+---
+
+## 7. Pemisahan Seeder Minimal dan Seeder Demo
+
+- **Konteks:** Perubahan akun dan tim (commit 6ee1b45) membuat `DatabaseSeeder` hanya berisi admin, pimpinan, dan 6 tim tanpa ketua/anggota. Data dummy PRD butuh akun dan tim lama.
+- **Keputusan:**
+  - `DatabaseSeeder` minimal: `SettingSeeder`, `UserSeeder`, `TeamSeeder`.
+  - `DemoDataSeeder` opsional berisi akun ketua/pegawai, ketua dan anggota tim, kegiatan, penugasan, kendala, notifikasi, audit log.
+  - Test memakai `RefreshDatabase` pada `jadwal_bps_test` dan seeder demo dipanggil lewat `$seed`/`$seeder` di TestCase.
+  - `DemoDataSeeder` idempoten (updateOrCreate/syncWithoutDetaching).
+- **Alasan:** Menjaga database development tetap bersih, test reproducible dari database kosong, dan tidak mengubah PRD.
   - Pada Model `AuditLog`, atribut ini di-cast sebagai `array` (`'sebelum' => 'array'`, `'sesudah' => 'array'`).
 
 ---

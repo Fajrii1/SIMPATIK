@@ -18,11 +18,6 @@ class DatabaseSeeder extends Seeder
             SettingSeeder::class,
             UserSeeder::class,
             TeamSeeder::class,
-            ActivitySeeder::class,
-            AssignmentSeeder::class,
-            WeeklyIssueSeeder::class,
-            NotificationSeeder::class,
-            AuditLogSeeder::class,
         ]);
     }
 }

@@ -31,8 +31,12 @@ Sesuaikan `.env` (DB_DATABASE, DB_USERNAME, DB_PASSWORD). Buat database `jadwal_
 ```bash
 php artisan migrate
 php artisan db:seed
+# Opsional, untuk data demo sesuai PRD:
+php artisan db:seed --class=DemoDataSeeder
 php artisan serve --host=127.0.0.1 --port=8000
 ```
+
+Catatan: `db:seed` minimal hanya membuat admin, pimpinan, dan 6 tim. Data dummy dijalankan melalui `DemoDataSeeder`.
 
 ## Setup Frontend
 
@@ -101,10 +105,13 @@ frontend/
 
 ## Pengujian
 
-Backend:
+Backend (gunakan database pengujian terpisah `jadwal_bps_test`):
 
 ```bash
 cd backend
+# buat DB jadwal_bps_test, lalu:
+php artisan migrate:fresh --seed
+php artisan db:seed --class=DemoDataSeeder
 php artisan test
 ```
 

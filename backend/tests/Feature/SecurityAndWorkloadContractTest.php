@@ -7,7 +7,6 @@ use App\Enums\PeranPengguna;
 use App\Enums\SatuanPenugasan;
 use App\Models\Activity;
 use App\Models\Assignment;
-use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
 use Carbon\Carbon;
@@ -17,15 +16,25 @@ use Tests\TestCase;
 class SecurityAndWorkloadContractTest extends TestCase
 {
     protected User $admin;
+
     protected User $ketuaTimA;
+
     protected User $pegawaiA;
+
     protected User $pegawaiB;
+
     protected User $nonaktifUser;
+
     protected Team $teamA;
+
     protected Team $teamB;
+
     protected Activity $activityA;
+
     protected Activity $activityB;
+
     protected Assignment $assignmentPegawaiA;
+
     protected Assignment $assignmentPegawaiB;
 
     protected function setUp(): void
@@ -245,4 +254,3 @@ class SecurityAndWorkloadContractTest extends TestCase
         ]);
     }
 }
-

@@ -10,7 +10,6 @@ use App\Services\WorkloadService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
@@ -89,7 +88,7 @@ class ReportController extends Controller
                     $row['nip'],
                     $row['tim'],
                     $row['poin'],
-                    $row['persentase'] . '%',
+                    $row['persentase'].'%',
                     strtoupper($row['indikator']),
                     $row['jumlah_penugasan'],
                     $row['penugasan_bersamaan_maks'],
@@ -97,6 +96,7 @@ class ReportController extends Controller
             }
 
             $tempPath = SimpleXlsxWriter::createXlsx($xlsxRows, 'Beban Kerja');
+
             return response()->download($tempPath, "Laporan_Beban_Kerja_{$month}.xlsx", [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ])->deleteFileAfterSend(true);
@@ -213,6 +213,7 @@ class ReportController extends Controller
             }
 
             $tempPath = SimpleXlsxWriter::createXlsx($xlsxRows, 'Kegiatan');
+
             return response()->download($tempPath, "Laporan_Kegiatan_{$year}.xlsx", [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ])->deleteFileAfterSend(true);

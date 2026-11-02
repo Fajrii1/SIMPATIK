@@ -16,12 +16,12 @@ class WeeklyIssueSeeder extends Seeder
      */
     public function run(): void
     {
-        $sosial = Team::where('nama', 'Tim Sosial')->first();
-        $produksi = Team::where('nama', 'Tim Produksi')->first();
-        $distribusi = Team::where('nama', 'Tim Distribusi')->first();
-        $neraca = Team::where('nama', 'Tim Neraca dan Analisis')->first();
-        $ipds = Team::where('nama', 'Tim IPDS')->first();
-        $pelayanan = Team::where('nama', 'Tim Pelayanan Statistik')->first();
+        $sosial = Team::where('nama', 'Sosial')->first();
+        $produksi = Team::where('nama', 'Produksi')->first();
+        $distribusi = Team::where('nama', 'Distribusi')->first();
+        $neraca = Team::where('nama', 'NWAS')->first();
+        $ipds = Team::where('nama', 'IPDS')->first();
+        $pelayanan = Team::where('nama', 'Umum')->first();
 
         $ketua1 = User::where('email', 'ketua1@contoh.test')->first();
         $ketua2 = User::where('email', 'ketua2@contoh.test')->first();

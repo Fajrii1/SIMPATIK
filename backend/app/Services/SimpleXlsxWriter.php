@@ -16,7 +16,7 @@ class SimpleXlsxWriter
     {
         $tempFile = tempnam(sys_get_temp_dir(), 'xlsx_');
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($tempFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new \RuntimeException('Gagal membuat arsip XLSX.');
         }
@@ -52,7 +52,7 @@ class SimpleXlsxWriter
         $workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="' . $escapedTitle . '" sheetId="1" r:id="rId1"/>
+    <sheet name="'.$escapedTitle.'" sheetId="1" r:id="rId1"/>
   </sheets>
 </workbook>';
         $zip->addFromString('xl/workbook.xml', $workbook);
@@ -83,18 +83,18 @@ class SimpleXlsxWriter
         $sheetData = '';
         foreach ($rows as $rowIndex => $row) {
             $rNum = $rowIndex + 1;
-            $sheetData .= '<row r="' . $rNum . '">';
+            $sheetData .= '<row r="'.$rNum.'">';
             foreach ($row as $colIndex => $value) {
                 $colLetter = self::columnIndexToLetter($colIndex);
-                $cellRef = $colLetter . $rNum;
+                $cellRef = $colLetter.$rNum;
 
                 if (is_numeric($value) && ! is_string($value)) {
-                    $sheetData .= '<c r="' . $cellRef . '" t="n"><v>' . $value . '</v></c>';
+                    $sheetData .= '<c r="'.$cellRef.'" t="n"><v>'.$value.'</v></c>';
                 } elseif ($value === null || $value === '') {
-                    $sheetData .= '<c r="' . $cellRef . '"/>';
+                    $sheetData .= '<c r="'.$cellRef.'"/>';
                 } else {
                     $strVal = htmlspecialchars((string) $value, ENT_XML1, 'UTF-8');
-                    $sheetData .= '<c r="' . $cellRef . '" t="inlineStr"><is><t>' . $strVal . '</t></is></c>';
+                    $sheetData .= '<c r="'.$cellRef.'" t="inlineStr"><is><t>'.$strVal.'</t></is></c>';
                 }
             }
             $sheetData .= '</row>';
@@ -102,7 +102,7 @@ class SimpleXlsxWriter
 
         $worksheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetData>' . $sheetData . '</sheetData>
+  <sheetData>'.$sheetData.'</sheetData>
 </worksheet>';
         $zip->addFromString('xl/worksheets/sheet1.xml', $worksheet);
 
@@ -115,10 +115,10 @@ class SimpleXlsxWriter
     {
         $letter = '';
         while ($colIndex >= 0) {
-            $letter = chr($colIndex % 26 + 65) . $letter;
+            $letter = chr($colIndex % 26 + 65).$letter;
             $colIndex = intdiv($colIndex, 26) - 1;
         }
+
         return $letter;
     }
 }
-
