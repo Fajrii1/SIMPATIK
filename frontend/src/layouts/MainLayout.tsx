@@ -221,10 +221,6 @@ export const MainLayout: React.FC = () => {
             >
               <Menu className="w-6 h-6" />
             </button>
-
-            <span className=" text-xs font-semibold px-2.5 py-1  text-sky-700">
-              Sistem Aktif
-            </span>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
