@@ -98,6 +98,31 @@ export function getDaysInMonth(year: number, monthIndex: number): number {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
 
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+export function buildIsoDate(year: number, monthIndex: number, day: number): string {
+  return `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+}
+
+/**
+ * Offset hari pertama bulan dari hari Senin (0 = Senin ... 6 = Minggu).
+ * Dihitung murni tanpa objek Date agar stabil saat render.
+ */
+export function getWeekdayOffset(year: number, monthIndex: number): number {
+  const monthTable = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  const adjustedYear = monthIndex < 2 ? year - 1 : year;
+  const sundayBased =
+    (adjustedYear +
+      Math.floor(adjustedYear / 4) -
+      Math.floor(adjustedYear / 100) +
+      Math.floor(adjustedYear / 400) +
+      monthTable[monthIndex] +
+      1) %
+    7;
+
+  return (sundayBased + 6) % 7;
+}
+
 export function getEventInclusiveEnd(event: CalendarEvent): string {
   const end = parseIsoDate(event.end);
   end.setDate(end.getDate() - 1);

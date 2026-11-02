@@ -321,6 +321,7 @@ export const CalendarPage: React.FC = () => {
               year={year}
               month={month}
               events={events}
+              teams={activeTeams}
               teamStyles={teamStyles}
               onPrevMonth={() => changeMonth(-1)}
               onNextMonth={() => changeMonth(1)}
