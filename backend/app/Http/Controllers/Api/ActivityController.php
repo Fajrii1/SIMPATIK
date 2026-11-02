@@ -108,6 +108,34 @@ class ActivityController extends Controller
                 'keterangan' => $validated['keterangan'] ?? null,
             ]);
 
+            // Simpan penugasan awal secara atomik bersama kegiatan (PRD Bagian 14).
+            foreach ($validated['assignments'] ?? [] as $assignmentData) {
+                $assignment = $activity->assignments()->create([
+                    'user_id' => $assignmentData['user_id'],
+                    'peran' => $assignmentData['peran'],
+                    'volume' => $assignmentData['volume'],
+                    'satuan' => $assignmentData['satuan'],
+                    'mulai' => $assignmentData['mulai'] ?? null,
+                    'selesai' => $assignmentData['selesai'] ?? null,
+                ]);
+
+                AuditLog::create([
+                    'user_id' => Auth::id(),
+                    'aksi' => 'create',
+                    'objek' => 'Assignment',
+                    'objek_id' => $assignment->id,
+                    'sebelum' => null,
+                    'sesudah' => $assignment->toArray(),
+                ]);
+
+                Notification::create([
+                    'user_id' => $assignment->user_id,
+                    'tipe' => 'penugasan_baru',
+                    'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->volume} {$assignment->satuan}).",
+                    'tautan' => "/kegiatan/{$activity->id}",
+                ]);
+            }
+
             // Catat ke audit_logs (PRD Bagian 8.4)
             AuditLog::create([
                 'user_id' => Auth::id(),
@@ -121,7 +149,7 @@ class ActivityController extends Controller
             return $activity;
         });
 
-        return (new ActivityResource($activity->load('team')))
+        return (new ActivityResource($activity->load(['team', 'assignments.user'])))
             ->response()
             ->setStatusCode(201);
     }

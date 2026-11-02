@@ -20,10 +20,22 @@ class WeeklyIssueRequest extends FormRequest
             return true;
         }
 
-        // Cek izin pegawai mengisi kendala dari pengaturan sistem
+        // Cek izin pegawai mengisi kendala dari pengaturan sistem.
+        // Bila diizinkan, pegawai tetap hanya boleh melaporkan kendala untuk tim
+        // yang diikutinya (atau kegiatan milik tim tersebut) sesuai PRD Bagian 14.
         $allowed = Setting::getVal('pegawai_boleh_isi_kendala', false);
         if ($allowed) {
-            return true;
+            $teamId = (int) $this->input('team_id');
+            $userTeamIds = $user->teams()->pluck('teams.id')->all();
+
+            if ($teamId > 0 && (in_array($teamId, $userTeamIds, true) || $user->isKetuaOf($teamId))) {
+                return true;
+            }
+
+            $activity = $this->has('activity_id') ? Activity::find($this->input('activity_id')) : null;
+
+            return $activity !== null
+                && (in_array($activity->team_id, $userTeamIds, true) || $user->isKetuaOf($activity->team_id));
         }
 
         // Ketua tim selalu boleh mengisi kendala untuk timnya

@@ -2,11 +2,15 @@ import type { Team, User } from '../types';
 import type {
   CalendarAnalytics,
   CalendarEvent,
+  CalendarFilters,
+  EmployeeConflict,
   EmployeeSummary,
   MonthBreakdown,
   OverlapMonth,
+  StatusCounts,
   TeamStyle,
   TeamWorkloadSummary,
+  WorkloadIndicator,
 } from './calendarTypes';
 
 export const PALETTE = {
@@ -123,6 +127,69 @@ export function getWeekdayOffset(year: number, monthIndex: number): number {
   return (sundayBased + 6) % 7;
 }
 
+const MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+export function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+export function getDaysInYear(year: number): number {
+  return isLeapYear(year) ? 366 : 365;
+}
+
+/** Nomor hari dalam tahun (1-366) dari string ISO, dihitung tanpa objek Date. */
+export function getDayOfYearNumber(iso: string): number {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  let total = 0;
+
+  for (let index = 0; index < month - 1; index += 1) {
+    total += MONTH_LENGTHS[index];
+    if (index === 1 && isLeapYear(year)) total += 1;
+  }
+
+  return total + day;
+}
+
+export function getMonthLength(year: number, monthIndex: number): number {
+  if (monthIndex === 1 && isLeapYear(year)) return 29;
+  return MONTH_LENGTHS[monthIndex] ?? 30;
+}
+
+export interface MonthSegment {
+  index: number;
+  label: string;
+  days: number;
+  widthPct: number;
+}
+
+/** Segmen bulan dengan lebar proporsional terhadap jumlah hari dalam tahun berjalan. */
+export function buildMonthSegments(year: number): MonthSegment[] {
+  const total = getDaysInYear(year);
+  return MONTHS_SHORT.map((label, index) => {
+    const days = getMonthLength(year, index);
+    return { index, label, days, widthPct: (days / total) * 100 };
+  });
+}
+
+export function eventOverlapsYear(event: CalendarEvent, year: number): boolean {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  return event.start <= yearEnd && getEventInclusiveEnd(event) >= yearStart;
+}
+
+export function eachDateInclusive(startIso: string, endIso: string): string[] {
+  const dates: string[] = [];
+  const current = parseIsoDate(startIso);
+  const end = parseIsoDate(endIso);
+
+  while (current <= end) {
+    dates.push(toIsoDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates;
+}
+
 export function getEventInclusiveEnd(event: CalendarEvent): string {
   const end = parseIsoDate(event.end);
   end.setDate(end.getDate() - 1);
@@ -201,6 +268,185 @@ export function heatCellStyle(count: number): {
   }
   return { backgroundColor: PALETTE.coral, color: PALETTE.white, border: `1px solid ${PALETTE.coral}` };
 }
+
+export function applyCalendarFilters(
+  events: CalendarEvent[],
+  filters: CalendarFilters
+): CalendarEvent[] {
+  const keyword = filters.search.trim().toLowerCase();
+
+  return events.filter((event) => {
+    if (filters.teamId && String(event.extendedProps.team_id) !== filters.teamId) return false;
+    if (filters.status && event.extendedProps.status !== filters.status) return false;
+    if (filters.jenis && event.extendedProps.jenis !== filters.jenis) return false;
+
+    if (filters.userId) {
+      const assigned = event.extendedProps.assigned_users.some(
+        (assignment) => String(assignment.user_id) === filters.userId
+      );
+      if (!assigned) return false;
+    }
+
+    if (keyword && !event.title.toLowerCase().includes(keyword)) return false;
+
+    return true;
+  });
+}
+
+export function buildStatusCounts(events: CalendarEvent[]): StatusCounts {
+  const counts: StatusCounts = { berjalan: 0, selesai: 0, belumMulai: 0, terlambat: 0 };
+
+  events.forEach((event) => {
+    switch (event.extendedProps.status) {
+      case 'Berjalan':
+        counts.berjalan += 1;
+        break;
+      case 'Selesai':
+        counts.selesai += 1;
+        break;
+      case 'Terlambat':
+        counts.terlambat += 1;
+        break;
+      default:
+        counts.belumMulai += 1;
+    }
+  });
+
+  return counts;
+}
+
+interface AssignmentPeriod {
+  event: CalendarEvent;
+  assignment: CalendarEvent['extendedProps']['assigned_users'][number];
+  start: string;
+  end: string;
+}
+
+/** Periode efektif seluruh penugasan (fallback ke periode kegiatan). */
+function collectAssignmentPeriods(events: CalendarEvent[], year: number): AssignmentPeriod[] {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const periods: AssignmentPeriod[] = [];
+
+  events.forEach((event) => {
+    const eventEnd = getEventInclusiveEnd(event);
+
+    event.extendedProps.assigned_users.forEach((assignment) => {
+      const rawStart = assignment.mulai || event.start;
+      const rawEnd = assignment.selesai || eventEnd;
+      const start = rawStart > yearStart ? rawStart : yearStart;
+      const end = rawEnd < yearEnd ? rawEnd : yearEnd;
+
+      if (start > end) return;
+
+      periods.push({ event, assignment, start, end });
+    });
+  });
+
+  return periods;
+}
+
+/**
+ * Konflik penugasan pegawai: hari ketika seorang pegawai memegang dua penugasan
+ * atau lebih yang periodenya beririsan. Berbeda dari overlap kegiatan.
+ */
+export function buildEmployeeConflicts(events: CalendarEvent[], year: number): EmployeeConflict[] {
+  const byUser = new Map<number, {
+    nama: string;
+    dates: Map<string, Set<string>>;
+    titles: Map<string, string>;
+  }>();
+
+  collectAssignmentPeriods(events, year).forEach(({ event, assignment, start, end }) => {
+    const entry = byUser.get(assignment.user_id) || {
+      nama: assignment.nama || 'Pegawai',
+      dates: new Map<string, Set<string>>(),
+      titles: new Map<string, string>(),
+    };
+
+    entry.titles.set(event.id, event.title);
+
+    eachDateInclusive(start, end).forEach((date) => {
+      const set = entry.dates.get(date) || new Set<string>();
+      set.add(event.id);
+      entry.dates.set(date, set);
+    });
+
+    byUser.set(assignment.user_id, entry);
+  });
+
+  const conflicts: EmployeeConflict[] = [];
+
+  byUser.forEach((entry, userId) => {
+    const conflictDates = Array.from(entry.dates.entries())
+      .filter(([, ids]) => ids.size >= 2)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    if (conflictDates.length === 0) return;
+
+    const activityIds = new Set<string>();
+    conflictDates.forEach(([, ids]) => ids.forEach((id) => activityIds.add(id)));
+
+    conflicts.push({
+      userId,
+      nama: entry.nama,
+      dates: conflictDates.map(([date]) => date),
+      maxConcurrent: conflictDates.reduce((max, [, ids]) => Math.max(max, ids.size), 0),
+      activities: Array.from(activityIds).map((id) => ({
+        id,
+        title: entry.titles.get(id) || 'Kegiatan',
+      })),
+    });
+  });
+
+  return conflicts.sort(
+    (a, b) => b.maxConcurrent - a.maxConcurrent || b.dates.length - a.dates.length || a.nama.localeCompare(b.nama)
+  );
+}
+
+/** Distribusi poin bulanan penugasan, konsisten dengan WorkloadService backend. */
+function splitPointsByMonth(
+  totalPoints: number,
+  startIso: string,
+  endIso: string
+): Record<string, number> {
+  const totalDays = eachDateInclusive(startIso, endIso).length;
+  if (totalDays <= 0) return {};
+
+  const result: Record<string, number> = {};
+  const start = parseIsoDate(startIso);
+  const end = parseIsoDate(endIso);
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+
+  while (cursor <= end) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const overlapStart = monthStart > start ? monthStart : start;
+    const overlapEnd = monthEnd < end ? monthEnd : end;
+
+    if (overlapStart <= overlapEnd) {
+      const days = Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000) + 1;
+      const key = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}`;
+      result[key] = Math.round(totalPoints * (days / totalDays) * 100) / 100;
+    }
+
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return result;
+}
+
+export function determineWorkloadIndicator(persentase: number): WorkloadIndicator {
+  if (persentase < 80) return 'aman';
+  if (persentase < 100) return 'hampir_penuh';
+  return 'melebihi';
+}
+
+export const WORKLOAD_LABELS: Record<WorkloadIndicator, string> = {
+  aman: 'Aman',
+  hampir_penuh: 'Hampir penuh',
+  melebihi: 'Melebihi ambang',
+};
 
 export function buildAnalytics(
   events: CalendarEvent[],
@@ -297,7 +543,7 @@ export function buildAnalytics(
   const overlaps: OverlapMonth[] = [];
   let overlapDayCount = 0;
 
-  const overlapByMonth = new Map<number, { days: number; eventIds: Set<string> }>();
+  const overlapByMonth = new Map<number, { dates: string[]; eventIds: Set<string> }>();
 
   Object.entries(dailyCounts).forEach(([date, count]) => {
     if (count < 2) return;
@@ -305,8 +551,8 @@ export function buildAnalytics(
     if (monthIndex < 0 || monthIndex > 11) return;
 
     overlapDayCount += 1;
-    const current = overlapByMonth.get(monthIndex) || { days: 0, eventIds: new Set<string>() };
-    current.days += 1;
+    const current = overlapByMonth.get(monthIndex) || { dates: [], eventIds: new Set<string>() };
+    current.dates.push(date);
 
     events.forEach((event) => {
       if (eventCoversDate(event, date)) {
@@ -323,7 +569,8 @@ export function buildAnalytics(
       overlaps.push({
         index: monthIndex,
         label: MONTHS[monthIndex],
-        days: data.days,
+        days: data.dates.length,
+        dates: data.dates.sort((a, b) => a.localeCompare(b)),
         activities: events
           .filter((event) => data.eventIds.has(event.id))
           .map((event) => ({
@@ -340,62 +587,124 @@ export function buildAnalytics(
     total: eventsInYear.size,
     activeMonths: activeMonths.size,
     overlapDayCount,
+    activeDays: Object.keys(dailyCounts).length,
     densestMonth,
     monthlyCounts,
     teamSummary,
     topMonths,
     overlaps,
+    statusCounts: buildStatusCounts(events),
+    employeeConflicts: buildEmployeeConflicts(events, year),
   };
 }
 
 export function buildEmployeeSummary(
   events: CalendarEvent[],
   users: User[],
-  year: number
+  year: number,
+  monthlyThreshold = 100
 ): EmployeeSummary[] {
   const userMap = new Map(users.map((user) => [user.id, user]));
   const summaries = new Map<
     number,
-    { id: number; nama: string; jabatan?: string; eventMap: Map<string, CalendarEvent>; picEventIds: Set<string>; days: Set<string> }
+    {
+      id: number;
+      nama: string;
+      jabatan?: string;
+      teams: Map<number, string>;
+      eventMap: Map<string, CalendarEvent>;
+      picEventIds: Set<string>;
+      days: Set<string>;
+      assignmentDays: number;
+      periodStart?: string;
+      periodEnd?: string;
+      dailyCounts: Map<string, number>;
+      monthlyPoints: Record<string, number>;
+    }
   >();
 
-  events.forEach((event) => {
-    const days = eachDateInRange(event.start, event.end).filter(
-      (date) => Number(date.slice(0, 4)) === year
-    );
-    if (days.length === 0) return;
+  collectAssignmentPeriods(events, year).forEach(({ event, assignment, start, end }) => {
+    const user = userMap.get(assignment.user_id);
+    const existing = summaries.get(assignment.user_id) || {
+      id: assignment.user_id,
+      nama: assignment.nama || user?.nama || 'Pegawai',
+      jabatan: user?.jabatan,
+      teams: new Map<number, string>(),
+      eventMap: new Map<string, CalendarEvent>(),
+      picEventIds: new Set<string>(),
+      days: new Set<string>(),
+      assignmentDays: 0,
+      dailyCounts: new Map<string, number>(),
+      monthlyPoints: {},
+    };
 
-    event.extendedProps.assigned_users.forEach((assignment) => {
-      const existing = summaries.get(assignment.user_id) || {
-        id: assignment.user_id,
-        nama: assignment.nama || userMap.get(assignment.user_id)?.nama || 'Pegawai',
-        jabatan: userMap.get(assignment.user_id)?.jabatan,
-        eventMap: new Map<string, CalendarEvent>(),
-        picEventIds: new Set<string>(),
-        days: new Set<string>(),
-      };
+    existing.eventMap.set(event.id, event);
+    existing.teams.set(event.extendedProps.team_id, event.extendedProps.team_nama || 'Tanpa tim');
 
-      existing.eventMap.set(event.id, event);
-      days.forEach((day) => existing.days.add(day));
+    const dates = eachDateInclusive(start, end);
+    existing.assignmentDays += dates.length;
 
-      const role = assignment.peran.toLowerCase();
-      if (role.includes('pic') || role.includes('penanggung jawab') || role.includes('ketua')) {
-        existing.picEventIds.add(event.id);
-      }
-
-      summaries.set(assignment.user_id, existing);
+    dates.forEach((date) => {
+      existing.days.add(date);
+      existing.dailyCounts.set(date, (existing.dailyCounts.get(date) || 0) + 1);
     });
+
+    if (!existing.periodStart || start < existing.periodStart) existing.periodStart = start;
+    if (!existing.periodEnd || end > existing.periodEnd) existing.periodEnd = end;
+
+    const role = assignment.peran.toLowerCase();
+    if (role.includes('pic') || role.includes('penanggung jawab') || role.includes('ketua')) {
+      existing.picEventIds.add(event.id);
+    }
+
+    const volume = assignment.volume ?? 1;
+    const totalPoints = Math.round(volume * event.extendedProps.bobot * 100) / 100;
+    const distribution = splitPointsByMonth(
+      totalPoints,
+      assignment.mulai || event.start,
+      assignment.selesai || getEventInclusiveEnd(event)
+    );
+
+    Object.entries(distribution).forEach(([monthKey, points]) => {
+      if (!monthKey.startsWith(`${year}-`)) return;
+      existing.monthlyPoints[monthKey] = Math.round(((existing.monthlyPoints[monthKey] || 0) + points) * 100) / 100;
+    });
+
+    summaries.set(assignment.user_id, existing);
   });
 
   return Array.from(summaries.values())
-    .map((summary) => ({
-      id: summary.id,
-      nama: summary.nama,
-      jabatan: summary.jabatan,
-      events: Array.from(summary.eventMap.values()),
-      picCount: summary.picEventIds.size,
-      busyDays: summary.days.size,
-    }))
+    .map((summary) => {
+      const peakEntry = Object.entries(summary.monthlyPoints).sort(([, a], [, b]) => b - a)[0];
+      const points = peakEntry ? peakEntry[1] : 0;
+      const persentase = monthlyThreshold > 0 ? (points / monthlyThreshold) * 100 : 0;
+      const peakMonth = peakEntry
+        ? {
+            key: peakEntry[0],
+            label: `${MONTHS[Number(peakEntry[0].slice(5, 7)) - 1]} ${peakEntry[0].slice(0, 4)}`,
+            points: peakEntry[1],
+          }
+        : undefined;
+
+      return {
+        id: summary.id,
+        nama: summary.nama,
+        jabatan: summary.jabatan,
+        teams: Array.from(summary.teams.entries())
+          .map(([id, nama]) => ({ id, nama }))
+          .sort((a, b) => a.nama.localeCompare(b.nama)),
+        events: Array.from(summary.eventMap.values()),
+        picCount: summary.picEventIds.size,
+        busyDays: summary.days.size,
+        assignmentDays: summary.assignmentDays,
+        periodStart: summary.periodStart,
+        periodEnd: summary.periodEnd,
+        maxConcurrent: Math.max(0, ...Array.from(summary.dailyCounts.values())),
+        points,
+        peakMonth,
+        indicator: determineWorkloadIndicator(persentase),
+      };
+    })
     .sort((a, b) => b.events.length - a.events.length || a.nama.localeCompare(b.nama));
 }
 
@@ -420,18 +729,28 @@ export function getYearOptions(): number[] {
 }
 
 export function getTimelinePosition(event: CalendarEvent, year: number): { left: number; width: number } {
-  const yearStart = new Date(year, 0, 1).getTime();
-  const yearEnd = new Date(year, 11, 31).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const total = yearEnd - yearStart + dayMs;
+  const totalDays = getDaysInYear(year);
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const inclusiveEnd = getEventInclusiveEnd(event);
 
-  const rawStart = parseIsoDate(event.start).getTime();
-  const rawEnd = parseIsoDate(getEventInclusiveEnd(event)).getTime();
-  const start = Math.max(rawStart, yearStart);
-  const end = Math.min(rawEnd, yearEnd);
+  if (event.start > yearEnd || inclusiveEnd < yearStart) {
+    return { left: 0, width: 0 };
+  }
 
-  const left = ((start - yearStart) / total) * 100;
-  const width = Math.max(((end - start + dayMs) / total) * 100, 0.8);
+  const clamp = (value: number) => Math.min(Math.max(value, 1), totalDays);
+  const startDay = clamp(getDayOfYearNumber(event.start < yearStart ? yearStart : event.start));
+  const endDay = clamp(getDayOfYearNumber(inclusiveEnd > yearEnd ? yearEnd : inclusiveEnd));
+
+  const left = ((startDay - 1) / totalDays) * 100;
+  const width = ((endDay - startDay + 1) / totalDays) * 100;
 
   return { left, width: Math.min(width, 100 - left) };
+}
+
+/** Posisi persentase tanggal tertentu di dalam tahun (untuk penanda hari ini). */
+export function getDayOfYearPercent(iso: string, year: number): number {
+  const total = getDaysInYear(year);
+  const day = Math.min(Math.max(getDayOfYearNumber(iso), 1), total);
+  return ((day - 1) / total) * 100;
 }

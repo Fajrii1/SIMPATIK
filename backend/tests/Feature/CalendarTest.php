@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\PeranPengguna;
 use App\Models\Activity;
+use App\Models\Assignment;
 use App\Models\Team;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
@@ -123,6 +124,85 @@ class CalendarTest extends TestCase
             $eventIds = collect($response->json('events'))->pluck('extendedProps.activity_id');
             $this->assertTrue($eventIds->contains($activity->id));
         } finally {
+            $activity->forceDelete();
+        }
+    }
+
+    /**
+     * Uji filter pegawai memakai periode efektif penugasan, bukan seluruh periode kegiatan.
+     */
+    public function test_calendar_filters_by_employee_assignment_period(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $team = Team::first();
+        $user = User::where('aktif', true)->orderBy('id')->first();
+
+        $activity = Activity::create([
+            'nama' => 'Kegiatan Uji Filter Pegawai Kalender',
+            'jenis' => 'Sensus',
+            'team_id' => $team->id,
+            'mulai' => '2026-09-01',
+            'selesai' => '2026-12-31',
+            'bobot' => 2.0,
+            'keterangan' => 'Keterangan uji filter pegawai',
+        ]);
+
+        $assignment = $activity->assignments()->create([
+            'user_id' => $user->id,
+            'peran' => 'PIC',
+            'volume' => 4,
+            'satuan' => 'Dokumen',
+            'mulai' => '2026-10-01',
+            'selesai' => '2026-10-31',
+        ]);
+
+        try {
+            Sanctum::actingAs($admin);
+
+            // 1. Di dalam periode efektif penugasan -> muncul
+            $inside = $this->getJson("/api/calendar?start=2026-10-01&end=2026-10-31&user_id={$user->id}");
+            $inside->assertStatus(200);
+            $insideIds = collect($inside->json('events'))->pluck('extendedProps.activity_id');
+            $this->assertTrue($insideIds->contains($activity->id));
+
+            // 2. Di luar periode efektif penugasan (tetapi masih di dalam kegiatan) -> tidak muncul untuk pegawai itu
+            $outside = $this->getJson("/api/calendar?start=2026-11-01&end=2026-11-30&user_id={$user->id}");
+            $outside->assertStatus(200);
+            $outsideIds = collect($outside->json('events'))->pluck('extendedProps.activity_id');
+            $this->assertFalse($outsideIds->contains($activity->id));
+
+            // 3. Kata kunci dan jenis kegiatan
+            $search = $this->getJson('/api/calendar?start=2026-10-01&end=2026-10-31&search=Filter Pegawai Kalender');
+            $search->assertStatus(200);
+            $this->assertTrue(
+                collect($search->json('events'))->pluck('extendedProps.activity_id')->contains($activity->id)
+            );
+
+            $jenis = $this->getJson('/api/calendar?start=2026-10-01&end=2026-10-31&jenis=Sensus');
+            $jenis->assertStatus(200);
+            foreach ($jenis->json('events') as $event) {
+                $this->assertSame('Sensus', $event['extendedProps']['jenis']);
+            }
+
+            // 4. Status dinormalisasi (huruf besar/kecil sama-sama diterima)
+            $this->getJson('/api/calendar?start=2026-10-01&end=2026-10-31&status=Belum Mulai')
+                ->assertStatus(200);
+            $this->getJson('/api/calendar?start=2026-10-01&end=2026-10-31&status=berjalan')
+                ->assertStatus(200);
+
+            // 5. Data penugasan efektif tersedia di event
+            $detail = $this->getJson("/api/calendar?start=2026-10-01&end=2026-10-31&search=Filter Pegawai Kalender");
+            $event = collect($detail->json('events'))->firstWhere('extendedProps.activity_id', $activity->id);
+            $this->assertNotNull($event);
+            $this->assertSame('Keterangan uji filter pegawai', $event['extendedProps']['keterangan']);
+            $this->assertSame(4, (int) $event['extendedProps']['assigned_users'][0]['volume']);
+            $this->assertSame('Dokumen', $event['extendedProps']['assigned_users'][0]['satuan']);
+            $this->assertSame('2026-10-01', $event['extendedProps']['assigned_users'][0]['mulai']);
+            $this->assertSame('2026-10-31', $event['extendedProps']['assigned_users'][0]['selesai']);
+            // end tetap eksklusif (1 hari setelah tanggal selesai kegiatan)
+            $this->assertSame('2027-01-01', $event['end']);
+        } finally {
+            $assignment->forceDelete();
             $activity->forceDelete();
         }
     }

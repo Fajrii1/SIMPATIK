@@ -1,9 +1,12 @@
 import type { Team, User } from '../types';
 
 export interface AssignedUser {
+  assignment_id?: number;
   user_id: number;
   nama: string;
   peran: string;
+  volume?: number;
+  satuan?: string;
   mulai?: string;
   selesai?: string;
 }
@@ -17,6 +20,7 @@ export interface CalendarEventExtendedProps {
   bobot: number;
   kegiatan_besar: boolean;
   selesai_manual: boolean;
+  keterangan?: string | null;
   assignments_count: number;
   assigned_users: AssignedUser[];
 }
@@ -31,6 +35,15 @@ export interface CalendarEvent {
 }
 
 export type CalendarTab = 'heatmap' | 'timeline' | 'monthly' | 'summary' | 'employees';
+
+export interface CalendarFilters {
+  year: number;
+  teamId: string;
+  userId: string;
+  status: string;
+  jenis: string;
+  search: string;
+}
 
 export interface TeamStyle {
   solid: string;
@@ -57,27 +70,66 @@ export interface OverlapMonth {
   index: number;
   label: string;
   days: number;
+  dates: string[];
   activities: { id: string; title: string; team_nama?: string }[];
+}
+
+export interface StatusCounts {
+  berjalan: number;
+  selesai: number;
+  belumMulai: number;
+  terlambat: number;
+}
+
+export interface EmployeeConflict {
+  userId: number;
+  nama: string;
+  dates: string[];
+  maxConcurrent: number;
+  activities: { id: string; title: string }[];
 }
 
 export interface CalendarAnalytics {
   total: number;
   activeMonths: number;
   overlapDayCount: number;
+  activeDays: number;
   densestMonth: MonthBreakdown | null;
   monthlyCounts: Record<string, string | number>[];
   teamSummary: TeamWorkloadSummary[];
   topMonths: MonthBreakdown[];
   overlaps: OverlapMonth[];
+  statusCounts: StatusCounts;
+  employeeConflicts: EmployeeConflict[];
 }
+
+export type WorkloadIndicator = 'aman' | 'hampir_penuh' | 'melebihi';
 
 export interface EmployeeSummary {
   id: number;
   nama: string;
   jabatan?: string;
+  teams: { id: number; nama: string }[];
   events: CalendarEvent[];
   picCount: number;
   busyDays: number;
+  assignmentDays: number;
+  periodStart?: string;
+  periodEnd?: string;
+  maxConcurrent: number;
+  points: number;
+  peakMonth?: { key: string; label: string; points: number };
+  indicator: WorkloadIndicator;
+}
+
+export interface AddAssignmentForm {
+  key: string;
+  user_id: string;
+  peran: string;
+  volume: string;
+  satuan: string;
+  mulai: string;
+  selesai: string;
 }
 
 export interface AddActivityForm {
@@ -86,10 +138,10 @@ export interface AddActivityForm {
   jenis: string;
   mulai: string;
   selesai: string;
-  pic_id: string;
-  member_ids: string[];
+  bobot: string;
   keterangan: string;
   kegiatan_besar: boolean;
+  assignments: AddAssignmentForm[];
 }
 
 export interface CalendarPageData {

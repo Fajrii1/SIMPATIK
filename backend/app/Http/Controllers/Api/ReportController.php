@@ -143,9 +143,28 @@ class ReportController extends Controller
      */
     public function activitiesReport(Request $request)
     {
+        $currentUser = $request->user();
+        $role = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
+        $ledTeamIds = $currentUser->ledTeams()->pluck('teams.id')->map(fn ($id) => (int) $id)->all();
+        $isGlobalExporter = in_array($role, ['admin', 'pimpinan'], true);
+
+        // PRD Bagian 14: pegawai biasa tidak berhak mengekspor rekap.
+        if (! $isGlobalExporter && $ledTeamIds === []) {
+            return response()->json(['message' => 'Anda tidak berwenang mengekspor laporan kegiatan seluruh tim.'], 403);
+        }
+
         $year = $request->query('year', Carbon::now()->format('Y'));
         $format = strtolower($request->query('format', 'csv'));
         $teamId = $request->query('team_id');
+
+        // Ketua tim hanya boleh mengekspor tim yang dipimpinnya.
+        if (! $isGlobalExporter) {
+            if ($teamId !== null && $teamId !== '') {
+                if (! in_array((int) $teamId, $ledTeamIds, true)) {
+                    return response()->json(['message' => 'Anda hanya dapat mengekspor laporan tim yang Anda pimpin.'], 403);
+                }
+            }
+        }
 
         $query = Activity::with(['team', 'assignments'])
             ->where(function ($q) use ($year) {
@@ -153,7 +172,9 @@ class ReportController extends Controller
                     ->orWhereYear('selesai', $year);
             });
 
-        if ($teamId) {
+        if (! $isGlobalExporter) {
+            $query->whereIn('team_id', $ledTeamIds);
+        } elseif ($teamId) {
             $query->where('team_id', $teamId);
         }
 

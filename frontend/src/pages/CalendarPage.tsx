@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   List,
   Plus,
+  Search,
   Users,
   X,
 } from 'lucide-react';
@@ -19,9 +20,11 @@ import { HeatmapTab } from './CalendarHeatmapTab';
 import { MonthlyCalendarTab } from './CalendarMonthlyCalendarTab';
 import { SummaryTab } from './CalendarSummaryTab';
 import { TimelineTab } from './CalendarTimelineTab';
-import type { CalendarEvent, CalendarTab } from './calendarTypes';
+import type { CalendarEvent, CalendarFilters, CalendarTab } from './calendarTypes';
 import {
+  JENIS_KEGIATAN,
   PALETTE,
+  applyCalendarFilters,
   buildAnalytics,
   buildDailyCounts,
   buildEmployeeSummary,
@@ -35,19 +38,28 @@ const selectClass =
 
 const PAGE_LOADED_AT = new Date();
 
+const STATUS_OPTIONS = ['Belum Mulai', 'Berjalan', 'Selesai', 'Terlambat'];
+
 export const CalendarPage: React.FC = () => {
   const { user } = useAuth();
   const peran = user?.peran;
   const now = PAGE_LOADED_AT;
 
-  const [year, setYear] = useState(now.getFullYear());
+  const [filters, setFilters] = useState<CalendarFilters>({
+    year: now.getFullYear(),
+    teamId: '',
+    userId: '',
+    status: '',
+    jenis: '',
+    search: '',
+  });
   const [month, setMonth] = useState(now.getMonth());
-  const [teamFilter, setTeamFilter] = useState('');
   const [activeTab, setActiveTab] = useState<CalendarTab>('heatmap');
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
+  const [monthlyThreshold, setMonthlyThreshold] = useState(100);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -56,17 +68,20 @@ export const CalendarPage: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [notice, setNotice] = useState('');
 
+  const year = filters.year;
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
+      // Satu permintaan kalender per tahun; filter tim/pegawai/status/jenis/search
+      // diterapkan di sisi klien agar seluruh tab selalu konsisten.
       const [calendarResponse, teamResponse] = await Promise.all([
         api.get('/calendar', {
           params: {
             start: `${year}-01-01`,
             end: `${year}-12-31`,
-            ...(teamFilter ? { team_id: Number(teamFilter) } : {}),
           },
         }),
         api.get('/teams', { params: { per_page: 100 } }),
@@ -85,6 +100,14 @@ export const CalendarPage: React.FC = () => {
       } else {
         setAdminUsers([]);
       }
+
+      try {
+        const settingResponse = await api.get('/settings');
+        const threshold = Number(settingResponse.data?.settings?.ambang_beban_bulanan);
+        setMonthlyThreshold(Number.isFinite(threshold) && threshold > 0 ? threshold : 100);
+      } catch {
+        setMonthlyThreshold(100);
+      }
     } catch (requestError: unknown) {
       const maybeError = requestError as { response?: { data?: { message?: string } }; message?: string };
       setError(
@@ -95,7 +118,7 @@ export const CalendarPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [year, teamFilter, peran]);
+  }, [year, peran]);
 
   useEffect(() => {
     loadData();
@@ -116,6 +139,25 @@ export const CalendarPage: React.FC = () => {
     return buildUsersFromTeams(activeTeams);
   }, [adminUsers, activeTeams]);
 
+  // Pegawai yang muncul di filter: gabungan pegawai dari data tim dan penugasan.
+  const filterUsers = useMemo(() => {
+    const map = new Map<number, User>();
+    users.forEach((item) => map.set(item.id, item));
+    events.forEach((event) => {
+      event.extendedProps.assigned_users.forEach((assignment) => {
+        if (!map.has(assignment.user_id)) {
+          map.set(assignment.user_id, {
+            id: assignment.user_id,
+            nama: assignment.nama,
+            peran: 'pegawai',
+            aktif: true,
+          } as User);
+        }
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.nama.localeCompare(b.nama));
+  }, [users, events]);
+
   const canManage = useMemo(
     () => user?.peran === 'admin' || activeTeams.some((team) => team.ketua_id === user?.id),
     [user, activeTeams]
@@ -126,21 +168,50 @@ export const CalendarPage: React.FC = () => {
     return activeTeams.filter((team) => team.ketua_id === user?.id);
   }, [user, activeTeams]);
 
+  const filteredEvents = useMemo(() => applyCalendarFilters(events, filters), [events, filters]);
+  const hasActiveFilters = Boolean(
+    filters.teamId || filters.userId || filters.status || filters.jenis || filters.search.trim()
+  );
+
   const teamStyles = useMemo(() => createTeamStyles(activeTeams), [activeTeams]);
-  const dailyCounts = useMemo(() => buildDailyCounts(events, year), [events, year]);
-  const analytics = useMemo(() => buildAnalytics(events, activeTeams, year), [events, activeTeams, year]);
-  const employees = useMemo(() => buildEmployeeSummary(events, users, year), [events, users, year]);
-  const eventsById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
+  const dailyCounts = useMemo(() => buildDailyCounts(filteredEvents, year), [filteredEvents, year]);
+  const analytics = useMemo(
+    () => buildAnalytics(filteredEvents, activeTeams, year),
+    [filteredEvents, activeTeams, year]
+  );
+  const employees = useMemo(
+    () => buildEmployeeSummary(filteredEvents, filterUsers, year, monthlyThreshold),
+    [filteredEvents, filterUsers, year, monthlyThreshold]
+  );
+  const eventsById = useMemo(
+    () => new Map(filteredEvents.map((event) => [event.id, event])),
+    [filteredEvents]
+  );
 
   const defaultTeamId = useMemo(() => {
-    if (teamFilter && manageableTeams.some((team) => String(team.id) === teamFilter)) {
-      return Number(teamFilter);
+    if (filters.teamId && manageableTeams.some((team) => String(team.id) === filters.teamId)) {
+      return Number(filters.teamId);
     }
     return manageableTeams[0]?.id;
-  }, [teamFilter, manageableTeams]);
+  }, [filters.teamId, manageableTeams]);
+
+  const updateFilter = <K extends keyof CalendarFilters>(key: K, value: CalendarFilters[K]) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const resetFilters = () => {
+    setFilters((current) => ({
+      year: current.year,
+      teamId: '',
+      userId: '',
+      status: '',
+      jenis: '',
+      search: '',
+    }));
+  };
 
   const handleYearChange = (value: number) => {
-    setYear(value);
+    setFilters((current) => ({ ...current, year: value }));
     setMonth(value === now.getFullYear() ? now.getMonth() : 0);
   };
 
@@ -148,7 +219,7 @@ export const CalendarPage: React.FC = () => {
     const total = year * 12 + month + offset;
     const nextYear = Math.floor(total / 12);
     const nextMonth = ((total % 12) + 12) % 12;
-    setYear(nextYear);
+    setFilters((current) => ({ ...current, year: nextYear }));
     setMonth(nextMonth);
   };
 
@@ -157,7 +228,7 @@ export const CalendarPage: React.FC = () => {
     setNotice('Kegiatan berhasil ditambahkan.');
 
     if (startYear && startYear !== year) {
-      setYear(startYear);
+      setFilters((current) => ({ ...current, year: startYear }));
       setMonth(startYear === now.getFullYear() ? now.getMonth() : 0);
     }
 
@@ -193,34 +264,15 @@ export const CalendarPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="Pilih tahun"
-            value={year}
-            onChange={(event) => handleYearChange(Number(event.target.value))}
-            className={selectClass}
-            style={{ color: PALETTE.ink }}
+          <button
+            type="button"
+            onClick={() => setReloadKey((current) => current + 1)}
+            disabled={loading}
+            className="inline-flex min-h-10 items-center rounded-lg border border-[#E3EEFA] px-3 text-xs font-medium transition hover:bg-[#F7F9FC] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ color: PALETTE.slate }}
           >
-            {getYearOptions().map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-
-          <select
-            aria-label="Filter tim"
-            value={teamFilter}
-            onChange={(event) => setTeamFilter(event.target.value)}
-            className={`${selectClass} max-w-[190px]`}
-            style={{ color: PALETTE.ink }}
-          >
-            <option value="">Semua Tim</option>
-            {activeTeams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.nama}
-              </option>
-            ))}
-          </select>
+            Muat ulang
+          </button>
 
           {canManage && (
             <button
@@ -233,6 +285,148 @@ export const CalendarPage: React.FC = () => {
               Tambah
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Filter terpusat: dipakai oleh seluruh tab kalender. */}
+      <div className="rounded-xl border border-[#E3EEFA] bg-white p-3 shadow-sm">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+              Tahun
+            </span>
+            <select
+              aria-label="Pilih tahun"
+              value={year}
+              onChange={(event) => handleYearChange(Number(event.target.value))}
+              className={`${selectClass} w-full`}
+              style={{ color: PALETTE.ink }}
+            >
+              {getYearOptions().map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+              Tim
+            </span>
+            <select
+              aria-label="Filter tim"
+              value={filters.teamId}
+              onChange={(event) => updateFilter('teamId', event.target.value)}
+              className={`${selectClass} w-full`}
+              style={{ color: PALETTE.ink }}
+            >
+              <option value="">Semua Tim</option>
+              {activeTeams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.nama}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+              Pegawai
+            </span>
+            <select
+              aria-label="Filter pegawai"
+              value={filters.userId}
+              onChange={(event) => updateFilter('userId', event.target.value)}
+              className={`${selectClass} w-full`}
+              style={{ color: PALETTE.ink }}
+            >
+              <option value="">Semua Pegawai</option>
+              {filterUsers.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.nama}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+              Status
+            </span>
+            <select
+              aria-label="Filter status kegiatan"
+              value={filters.status}
+              onChange={(event) => updateFilter('status', event.target.value)}
+              className={`${selectClass} w-full`}
+              style={{ color: PALETTE.ink }}
+            >
+              <option value="">Semua Status</option>
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+              Jenis
+            </span>
+            <select
+              aria-label="Filter jenis kegiatan"
+              value={filters.jenis}
+              onChange={(event) => updateFilter('jenis', event.target.value)}
+              className={`${selectClass} w-full`}
+              style={{ color: PALETTE.ink }}
+            >
+              <option value="">Semua Jenis</option>
+              {JENIS_KEGIATAN.map((jenis) => (
+                <option key={jenis} value={jenis}>
+                  {jenis}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+              Kata kunci
+            </span>
+            <span className="relative block">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+                style={{ color: PALETTE.slate }}
+              />
+              <input
+                type="search"
+                aria-label="Cari nama kegiatan"
+                value={filters.search}
+                onChange={(event) => updateFilter('search', event.target.value)}
+                placeholder="Cari kegiatan..."
+                className={`${selectClass} w-full pl-8`}
+                style={{ color: PALETTE.ink }}
+              />
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[10px]" style={{ color: PALETTE.slate }}>
+            {loading
+              ? 'Memuat data...'
+              : `${filteredEvents.length} dari ${events.length} kegiatan ditampilkan.`}
+          </p>
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasActiveFilters}
+            className="rounded-lg border border-[#E3EEFA] px-3 py-1.5 text-[11px] font-medium transition hover:bg-[#F7F9FC] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ color: PALETTE.slate }}
+          >
+            Reset filter
+          </button>
         </div>
       </div>
 
@@ -253,11 +447,7 @@ export const CalendarPage: React.FC = () => {
               className={`inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 ${
                 isActive ? 'text-white shadow-sm' : 'hover:bg-[#E3EEFA]'
               }`}
-              style={
-                isActive
-                  ? { backgroundColor: PALETTE.blue }
-                  : { color: PALETTE.slate }
-              }
+              style={isActive ? { backgroundColor: PALETTE.blue } : { color: PALETTE.slate }}
             >
               {tab.icon}
               {tab.label}
@@ -302,17 +492,36 @@ export const CalendarPage: React.FC = () => {
 
       {loading ? (
         <CalendarSkeleton />
-      ) : error ? null : (
+      ) : error ? null : filteredEvents.length === 0 ? (
+        <EmptyState
+          hasActiveFilters={hasActiveFilters}
+          onReset={resetFilters}
+          year={year}
+          hasEvents={events.length > 0}
+        />
+      ) : (
         <>
-          {activeTab === 'heatmap' && <HeatmapTab year={year} dailyCounts={dailyCounts} />}
+          {activeTab === 'heatmap' && (
+            <HeatmapTab
+              year={year}
+              events={filteredEvents}
+              dailyCounts={dailyCounts}
+              teamStyles={teamStyles}
+              onSelect={setSelectedEvent}
+              onResetFilters={resetFilters}
+              hasActiveFilters={hasActiveFilters}
+            />
+          )}
 
           {activeTab === 'timeline' && (
             <TimelineTab
               year={year}
-              events={events}
+              events={filteredEvents}
               teams={activeTeams}
               teamStyles={teamStyles}
               onSelect={setSelectedEvent}
+              onResetFilters={resetFilters}
+              hasActiveFilters={hasActiveFilters}
             />
           )}
 
@@ -320,7 +529,7 @@ export const CalendarPage: React.FC = () => {
             <MonthlyCalendarTab
               year={year}
               month={month}
-              events={events}
+              events={filteredEvents}
               teams={activeTeams}
               teamStyles={teamStyles}
               onPrevMonth={() => changeMonth(-1)}
@@ -337,6 +546,8 @@ export const CalendarPage: React.FC = () => {
               teamStyles={teamStyles}
               onSelect={setSelectedEvent}
               eventsById={eventsById}
+              onResetFilters={resetFilters}
+              hasActiveFilters={hasActiveFilters}
             />
           )}
 
@@ -346,6 +557,8 @@ export const CalendarPage: React.FC = () => {
               employees={employees}
               teamStyles={teamStyles}
               onSelect={setSelectedEvent}
+              onResetFilters={resetFilters}
+              hasActiveFilters={hasActiveFilters}
             />
           )}
         </>
@@ -355,7 +568,7 @@ export const CalendarPage: React.FC = () => {
         <AddActivityModal
           open={showAdd}
           teams={manageableTeams}
-          users={users}
+          users={filterUsers}
           defaultTeamId={defaultTeamId}
           onClose={() => setShowAdd(false)}
           onSaved={handleSaved}
@@ -367,11 +580,52 @@ export const CalendarPage: React.FC = () => {
           event={selectedEvent}
           teamStyles={teamStyles}
           onClose={() => setSelectedEvent(null)}
+          canManage={
+            user?.peran === 'admin' ||
+            activeTeams.some(
+              (team) => team.id === selectedEvent.extendedProps.team_id && team.ketua_id === user?.id
+            )
+          }
+          onChanged={() => setReloadKey((current) => current + 1)}
         />
       )}
     </div>
   );
 };
+
+const EmptyState: React.FC<{
+  hasActiveFilters: boolean;
+  onReset: () => void;
+  year: number;
+  hasEvents: boolean;
+}> = ({ hasActiveFilters, onReset, year, hasEvents }) => (
+  <section className="rounded-xl border border-[#E3EEFA] bg-white p-4 shadow-sm sm:p-5">
+    <div className="rounded-lg border border-dashed border-[#E3EEFA] px-4 py-12 text-center">
+      <p className="text-sm font-medium" style={{ color: PALETTE.ink }}>
+        {hasActiveFilters
+          ? 'Tidak ada kegiatan yang cocok dengan kombinasi filter.'
+          : `Belum ada kegiatan pada tahun ${year}.`}
+      </p>
+      <p className="mt-1 text-xs" style={{ color: PALETTE.slate }}>
+        {hasActiveFilters
+          ? 'Ubah atau reset filter untuk menampilkan kegiatan lain.'
+          : hasEvents
+            ? 'Coba pilih tahun lain.'
+            : 'Tambahkan kegiatan baru untuk mulai mengisi kalender.'}
+      </p>
+      {hasActiveFilters && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="mt-3 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-95"
+          style={{ backgroundColor: PALETTE.blue }}
+        >
+          Reset filter
+        </button>
+      )}
+    </div>
+  </section>
+);
 
 const CalendarSkeleton: React.FC = () => (
   <div

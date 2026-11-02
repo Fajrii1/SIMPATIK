@@ -7,8 +7,10 @@ use App\Enums\PeranPengguna;
 use App\Enums\StatusKendala;
 use App\Models\Activity;
 use App\Models\Notification;
+use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
+use App\Models\WeeklyIssue;
 use Carbon\Carbon;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -187,6 +189,40 @@ class RemainingModulesTest extends TestCase
         $carriedRes->assertOk();
     }
 
+    public function test_pegawai_cannot_report_issue_for_unrelated_team_when_setting_allows(): void
+    {
+        $original = Setting::getVal('pegawai_boleh_isi_kendala', false);
+        Setting::setVal('pegawai_boleh_isi_kendala', true);
+
+        $outsideTeam = Team::firstOrCreate(
+            ['nama' => 'Tim Luar Kendala Uji'],
+            ['keterangan' => 'Tim pembanding kendala', 'ketua_id' => null]
+        );
+
+        try {
+            Sanctum::actingAs($this->pegawai);
+            $monday = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
+
+            // Tim sendiri tetap boleh
+            $allowed = $this->postJson('/api/issues', [
+                'team_id' => $this->team->id,
+                'minggu_mulai' => $monday,
+                'kendala' => 'Kendala tim sendiri saat pengaturan mengizinkan.',
+            ]);
+            $allowed->assertCreated();
+            WeeklyIssue::find($allowed->json('data.id'))?->forceDelete();
+
+            // Tim lain harus ditolak walau pengaturan mengizinkan pegawai mengisi kendala
+            $this->postJson('/api/issues', [
+                'team_id' => $outsideTeam->id,
+                'minggu_mulai' => $monday,
+                'kendala' => 'Percobaan kendala tim lain.',
+            ])->assertForbidden();
+        } finally {
+            Setting::setVal('pegawai_boleh_isi_kendala', $original);
+        }
+    }
+
     public function test_notifications_endpoints_work(): void
     {
         Notification::where('user_id', $this->pegawai->id)->delete();
@@ -233,5 +269,42 @@ class RemainingModulesTest extends TestCase
 
         $actRes = $this->getJson('/api/reports/activities?format=csv');
         $actRes->assertOk()->assertHeader('content-type', 'text/csv; charset=UTF-8');
+    }
+
+    public function test_activities_report_enforces_role_based_export_rules(): void
+    {
+        // Pegawai biasa tanpa tim yang dipimpin -> 403
+        Sanctum::actingAs($this->pegawai);
+        $this->getJson('/api/reports/activities?format=csv')->assertForbidden();
+
+        // Ketua tim hanya boleh mengekspor timnya sendiri
+        Sanctum::actingAs($this->ketua);
+        $this->getJson('/api/reports/activities?format=csv')->assertOk();
+        $this->getJson("/api/reports/activities?format=csv&team_id={$this->team->id}")->assertOk();
+
+        $otherTeam = Team::firstOrCreate(
+            ['nama' => 'Tim Lain Ekspor Uji'],
+            ['keterangan' => 'Tim pembanding', 'ketua_id' => null]
+        );
+
+        $this->getJson("/api/reports/activities?format=csv&team_id={$otherTeam->id}")->assertForbidden();
+
+        // Pimpinan memiliki akses seluruh kantor
+        $pimpinan = User::firstOrCreate(
+            ['email' => 'pimpinan_export_rm@contoh.test'],
+            [
+                'nama' => 'Pimpinan Export RM',
+                'nip' => '198801012010011994',
+                'jabatan' => 'Kepala BPS',
+                'password' => 'password',
+                'peran' => PeranPengguna::PIMPINAN,
+                'aktif' => true,
+                'must_change_password' => false,
+            ]
+        );
+
+        Sanctum::actingAs($pimpinan);
+        $this->getJson('/api/reports/activities?format=csv')->assertOk();
+        $this->getJson("/api/reports/activities?format=csv&team_id={$otherTeam->id}")->assertOk();
     }
 }

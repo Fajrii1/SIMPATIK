@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Plus, Search, Trash2, Users, X } from 'lucide-react';
 import type { Team, User } from '../types';
-import type { AddActivityForm } from './calendarTypes';
+import type { AddActivityForm, AddAssignmentForm } from './calendarTypes';
 import { JENIS_KEGIATAN, PALETTE } from './calendarUtils';
 import api from '../services/api';
 
@@ -14,16 +14,34 @@ interface AddActivityModalProps {
   onSaved: (startYear?: number) => void | Promise<void>;
 }
 
+const SATUAN_OPTIONS = ['Dokumen', 'Blok Sensus', 'Responden', 'Hari', 'Laporan', 'Lainnya'];
+
+let assignmentSeq = 0;
+const nextAssignmentKey = () => {
+  assignmentSeq += 1;
+  return `assignment-${assignmentSeq}`;
+};
+
+const createAssignment = (mulai = '', selesai = ''): AddAssignmentForm => ({
+  key: nextAssignmentKey(),
+  user_id: '',
+  peran: 'PIC',
+  volume: '1',
+  satuan: 'Hari',
+  mulai,
+  selesai,
+});
+
 const EMPTY_FORM: AddActivityForm = {
   team_id: '',
   nama: '',
   jenis: 'Survei',
   mulai: '',
   selesai: '',
-  pic_id: '',
-  member_ids: [],
+  bobot: '1',
   keterangan: '',
   kegiatan_besar: false,
+  assignments: [createAssignment()],
 };
 
 const fieldClass =
@@ -44,20 +62,25 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
   const [form, setForm] = useState<AddActivityForm>(() => ({
     ...EMPTY_FORM,
     team_id: defaultTeamId ? String(defaultTeamId) : '',
+    assignments: [createAssignment()],
   }));
-  const [picSearch, setPicSearch] = useState('');
-  const [memberSearch, setMemberSearch] = useState('');
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [createdActivityId, setCreatedActivityId] = useState<number | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !saving) onClose();
     };
 
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [saving, onClose]);
 
   const selectedTeam = useMemo(
@@ -65,46 +88,56 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
     [teams, form.team_id]
   );
 
-  const picOptions = useMemo(() => {
-    const keyword = picSearch.trim().toLowerCase();
-    const options = users.filter((user) => {
-      if (!keyword) return true;
-      return (
+  const filteredUsers = useMemo(() => {
+    const keyword = employeeSearch.trim().toLowerCase();
+    if (!keyword) return users;
+    return users.filter(
+      (user) =>
         user.nama.toLowerCase().includes(keyword) ||
         (user.jabatan || '').toLowerCase().includes(keyword)
-      );
-    });
+    );
+  }, [users, employeeSearch]);
 
-    if (form.pic_id && !options.some((user) => String(user.id) === form.pic_id)) {
-      const selected = users.find((user) => String(user.id) === form.pic_id);
-      if (selected) options.unshift(selected);
-    }
+  const updateForm = <K extends keyof AddActivityForm>(key: K, value: AddActivityForm[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
 
-    return options;
-  }, [users, picSearch, form.pic_id]);
-
-  const memberOptions = useMemo(() => {
-    const keyword = memberSearch.trim().toLowerCase();
-    return users.filter((user) => {
-      if (String(user.id) === form.pic_id) return false;
-      if (!keyword) return true;
-      return (
-        user.nama.toLowerCase().includes(keyword) ||
-        (user.jabatan || '').toLowerCase().includes(keyword)
-      );
-    });
-  }, [users, memberSearch, form.pic_id]);
-
-  if (!open) return null;
-
-  const toggleMember = (id: string) => {
+  const updateAssignment = (key: string, patch: Partial<AddAssignmentForm>) => {
     setForm((current) => ({
       ...current,
-      member_ids: current.member_ids.includes(id)
-        ? current.member_ids.filter((item) => item !== id)
-        : [...current.member_ids, id],
+      assignments: current.assignments.map((assignment) =>
+        assignment.key === key ? { ...assignment, ...patch } : assignment
+      ),
     }));
   };
+
+  const addAssignment = () => {
+    setForm((current) => ({
+      ...current,
+      assignments: [
+        ...current.assignments,
+        createAssignment(current.mulai, current.selesai || current.mulai),
+      ],
+    }));
+  };
+
+  const removeAssignment = (key: string) => {
+    setForm((current) => ({
+      ...current,
+      assignments:
+        current.assignments.length <= 1
+          ? current.assignments
+          : current.assignments.filter((assignment) => assignment.key !== key),
+    }));
+  };
+
+  const totalPoints = useMemo(() => {
+    const bobot = Number(form.bobot) || 0;
+    return form.assignments.reduce((sum, assignment) => {
+      const volume = Number(assignment.volume) || 0;
+      return sum + volume * bobot;
+    }, 0);
+  }, [form.bobot, form.assignments]);
 
   const validate = (): string => {
     if (!form.team_id) return 'Tim penanggung jawab wajib dipilih.';
@@ -112,14 +145,52 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
     if (!form.mulai) return 'Tanggal mulai wajib diisi.';
     if (!form.selesai) return 'Tanggal selesai wajib diisi.';
     if (form.selesai < form.mulai) return 'Tanggal selesai tidak boleh sebelum tanggal mulai.';
-    if (!form.pic_id) return 'Penanggung jawab wajib dipilih.';
+
+    const bobot = Number(form.bobot);
+    if (!Number.isFinite(bobot) || bobot <= 0) return 'Bobot kegiatan harus lebih besar dari 0.';
+    if (bobot > 99.99) return 'Bobot kegiatan maksimal 99.99.';
+
+    if (form.assignments.length === 0) {
+      return 'Tambahkan minimal satu pegawai yang ditugaskan.';
+    }
+
+    const usedUsers = new Set<number>();
+
+    for (let index = 0; index < form.assignments.length; index += 1) {
+      const assignment = form.assignments[index];
+      const label = `Penugasan #${index + 1}`;
+
+      if (!assignment.user_id) return `${label}: pilih pegawai terlebih dahulu.`;
+      const userId = Number(assignment.user_id);
+      if (usedUsers.has(userId)) {
+        return `${label}: pegawai yang sama tidak boleh dipilih lebih dari sekali dalam satu pengiriman.`;
+      }
+      usedUsers.add(userId);
+
+      if (!assignment.peran.trim()) return `${label}: peran penugasan wajib diisi.`;
+      const volume = Number(assignment.volume);
+      if (!Number.isFinite(volume) || volume <= 0) return `${label}: volume harus lebih besar dari 0.`;
+      if (!assignment.satuan) return `${label}: satuan penugasan wajib dipilih.`;
+
+      if (assignment.mulai && assignment.mulai < form.mulai) {
+        return `${label}: tanggal mulai penugasan tidak boleh sebelum tanggal mulai kegiatan.`;
+      }
+      if (assignment.selesai && assignment.selesai > form.selesai) {
+        return `${label}: tanggal selesai penugasan tidak boleh melewati tanggal selesai kegiatan.`;
+      }
+      if (assignment.mulai && assignment.selesai && assignment.selesai < assignment.mulai) {
+        return `${label}: tanggal selesai penugasan tidak boleh sebelum tanggal mulai.`;
+      }
+    }
+
     return '';
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const validationMessage = validate();
+    if (saving) return;
 
+    const validationMessage = validate();
     if (validationMessage) {
       setError(validationMessage);
       return;
@@ -129,50 +200,24 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
     setError('');
 
     try {
-      let activityId = createdActivityId;
-
-      if (!activityId) {
-        const response = await api.post('/activities', {
-          nama: form.nama.trim(),
-          team_id: Number(form.team_id),
-          jenis: form.jenis,
-          mulai: form.mulai,
-          selesai: form.selesai,
-          bobot: 1,
-          kegiatan_besar: form.kegiatan_besar,
-          keterangan: form.keterangan.trim() || null,
-        });
-
-        activityId = Number(response.data?.data?.id || response.data?.id);
-
-        if (!activityId) {
-          throw new Error('Kegiatan tersimpan, tetapi ID kegiatan tidak ditemukan.');
-        }
-
-        setCreatedActivityId(activityId);
-      }
-
-      const assignments = [
-        { userId: Number(form.pic_id), peran: 'PIC' },
-        ...form.member_ids
-          .filter((id) => id !== form.pic_id)
-          .map((id) => ({ userId: Number(id), peran: 'Organik' })),
-      ];
-
-      const seen = new Set<number>();
-      for (const assignment of assignments) {
-        if (!assignment.userId || seen.has(assignment.userId)) continue;
-        seen.add(assignment.userId);
-
-        await api.post(`/activities/${activityId}/assignments`, {
-          user_id: assignment.userId,
-          peran: assignment.peran,
-          volume: 1,
-          satuan: 'Hari',
-          mulai: form.mulai,
-          selesai: form.selesai,
-        });
-      }
+      await api.post('/activities', {
+        nama: form.nama.trim(),
+        team_id: Number(form.team_id),
+        jenis: form.jenis,
+        mulai: form.mulai,
+        selesai: form.selesai,
+        bobot: Number(form.bobot),
+        kegiatan_besar: form.kegiatan_besar,
+        keterangan: form.keterangan.trim() || null,
+        assignments: form.assignments.map((assignment) => ({
+          user_id: Number(assignment.user_id),
+          peran: assignment.peran.trim(),
+          volume: Number(assignment.volume),
+          satuan: assignment.satuan,
+          mulai: assignment.mulai || null,
+          selesai: assignment.selesai || null,
+        })),
+      });
 
       const startYear = form.mulai ? Number(form.mulai.slice(0, 4)) : undefined;
       await onSaved(startYear);
@@ -187,16 +232,11 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
         ? Object.values(validationErrors).flat()[0]
         : undefined;
 
-      const message =
-        firstValidationError ||
-        maybeError.response?.data?.message ||
-        maybeError.message ||
-        'Gagal menyimpan kegiatan. Silakan coba lagi.';
-
       setError(
-        createdActivityId
-          ? `${message} Kegiatan sudah tersimpan; perbaiki data penugasan lalu klik Simpan lagi.`
-          : message
+        firstValidationError ||
+          maybeError.response?.data?.message ||
+          maybeError.message ||
+          'Gagal menyimpan kegiatan. Silakan coba lagi.'
       );
     } finally {
       setSaving(false);
@@ -205,19 +245,19 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#12305C]/55 p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#12305C]/55 p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-activity-title"
     >
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E3EEFA] bg-white px-5 py-4">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#E3EEFA] bg-white px-4 py-4 sm:px-5">
           <div>
             <h2 id="add-activity-title" className="text-base font-bold" style={{ color: PALETTE.navy }}>
               Tambah Kegiatan
             </h2>
             <p className="text-xs" style={{ color: PALETTE.slate }}>
-              Jadwalkan kegiatan dan tugaskan pegawai yang terlibat.
+              Kegiatan dan penugasan awal disimpan sekaligus dalam satu transaksi.
             </p>
           </div>
           <button
@@ -225,85 +265,80 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
             onClick={onClose}
             disabled={saving}
             aria-label="Tutup form tambah kegiatan"
-            className="flex h-9 w-9 items-center justify-center rounded text-[#5B6676] transition hover:bg-[#F7F9FC] disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5B6676] transition hover:bg-[#F7F9FC] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-40"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
-          <div>
-            <label htmlFor="activity-team" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-              Fungsi / Tim
-            </label>
-            <select
-              id="activity-team"
-              required
-              value={form.team_id}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  team_id: event.target.value,
-                  pic_id: '',
-                  member_ids: [],
-                }))
-              }
-              className={fieldClass}
-              style={{ color: PALETTE.ink }}
-            >
-              <option value="">Pilih tim</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.nama}
-                </option>
-              ))}
-            </select>
-            {selectedTeam?.ketua && (
-              <p className="mt-1 text-[10px]" style={{ color: PALETTE.slate }}>
-                Ketua tim: {selectedTeam.ketua.nama}
-              </p>
-            )}
+        <form onSubmit={handleSubmit} className="space-y-4 px-4 py-4 sm:px-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="activity-team" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
+                Fungsi / Tim <span style={{ color: PALETTE.coral }}>*</span>
+              </label>
+              <select
+                id="activity-team"
+                required
+                value={form.team_id}
+                onChange={(event) => updateForm('team_id', event.target.value)}
+                className={fieldClass}
+                style={{ color: PALETTE.ink }}
+              >
+                <option value="">Pilih tim</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.nama}
+                  </option>
+                ))}
+              </select>
+              {selectedTeam?.ketua && (
+                <p className="mt-1 text-[10px]" style={{ color: PALETTE.slate }}>
+                  Ketua tim: {selectedTeam.ketua.nama}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="activity-stage" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
+                Jenis Kegiatan <span style={{ color: PALETTE.coral }}>*</span>
+              </label>
+              <select
+                id="activity-stage"
+                value={form.jenis}
+                onChange={(event) => updateForm('jenis', event.target.value)}
+                className={fieldClass}
+                style={{ color: PALETTE.ink }}
+              >
+                {JENIS_KEGIATAN.map((jenis) => (
+                  <option key={jenis} value={jenis}>
+                    {jenis}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
             <label htmlFor="activity-name" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-              Nama Kegiatan
+              Nama Kegiatan <span style={{ color: PALETTE.coral }}>*</span>
             </label>
             <input
               id="activity-name"
               required
               maxLength={200}
               value={form.nama}
-              onChange={(event) => setForm((current) => ({ ...current, nama: event.target.value }))}
+              onChange={(event) => updateForm('nama', event.target.value)}
               placeholder="Masukkan nama kegiatan"
               className={fieldClass}
               style={{ color: PALETTE.ink }}
             />
           </div>
 
-          <div>
-            <label htmlFor="activity-stage" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-              Tahapan
-            </label>
-            <select
-              id="activity-stage"
-              value={form.jenis}
-              onChange={(event) => setForm((current) => ({ ...current, jenis: event.target.value }))}
-              className={fieldClass}
-              style={{ color: PALETTE.ink }}
-            >
-              {JENIS_KEGIATAN.map((jenis) => (
-                <option key={jenis} value={jenis}>
-                  {jenis}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div>
               <label htmlFor="activity-start" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-                Tanggal Mulai
+                Mulai <span style={{ color: PALETTE.coral }}>*</span>
               </label>
               <input
                 id="activity-start"
@@ -315,7 +350,12 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
                   setForm((current) => ({
                     ...current,
                     mulai: value,
-                    selesai: current.selesai || value,
+                    selesai: current.selesai && current.selesai >= value ? current.selesai : value,
+                    assignments: current.assignments.map((assignment) => ({
+                      ...assignment,
+                      mulai:
+                        !assignment.mulai || assignment.mulai < value ? value : assignment.mulai,
+                    })),
                   }));
                 }}
                 className={fieldClass}
@@ -325,7 +365,7 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
 
             <div>
               <label htmlFor="activity-end" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-                Tanggal Selesai
+                Selesai <span style={{ color: PALETTE.coral }}>*</span>
               </label>
               <input
                 id="activity-end"
@@ -333,126 +373,238 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
                 type="date"
                 min={form.mulai || undefined}
                 value={form.selesai}
-                onChange={(event) => setForm((current) => ({ ...current, selesai: event.target.value }))}
+                onChange={(event) => updateForm('selesai', event.target.value)}
+                className={fieldClass}
+                style={{ color: PALETTE.ink }}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="activity-weight" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
+                Bobot <span style={{ color: PALETTE.coral }}>*</span>
+              </label>
+              <input
+                id="activity-weight"
+                required
+                type="number"
+                min={0.01}
+                max={99.99}
+                step={0.01}
+                value={form.bobot}
+                onChange={(event) => updateForm('bobot', event.target.value)}
                 className={fieldClass}
                 style={{ color: PALETTE.ink }}
               />
             </div>
           </div>
 
-          <p className="-mt-2 text-[10px]" style={{ color: PALETTE.slate }}>
-            Tanggal selesai otomatis sama dengan tanggal mulai untuk kegiatan satu hari.
+          <p className="text-[10px]" style={{ color: PALETTE.slate }}>
+            Rumus poin: volume × bobot. Tanggal selesai boleh sama dengan tanggal mulai untuk kegiatan
+            satu hari.
           </p>
 
-          <div>
-            <label htmlFor="activity-pic-search" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-              Penanggung Jawab
-            </label>
-            <div className="relative mb-1.5">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
-                style={{ color: PALETTE.slate }}
-              />
-              <input
-                id="activity-pic-search"
-                type="search"
-                value={picSearch}
-                onChange={(event) => setPicSearch(event.target.value)}
-                placeholder="Cari nama organik..."
-                className={`${fieldClass} pl-8 text-xs`}
-                style={{ color: PALETTE.ink }}
-              />
+          <div className="rounded-lg border border-[#E3EEFA] p-3">
+            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: PALETTE.ink }}>
+                <Users className="h-3.5 w-3.5" />
+                Pegawai &amp; Penugasan
+              </span>
+              <span className="text-[10px]" style={{ color: PALETTE.slate }}>
+                Total poin: <strong style={{ color: PALETTE.navy }}>{Math.round(totalPoints * 100) / 100}</strong>
+              </span>
             </div>
-            <select
-              required
-              aria-label="Pilih penanggung jawab"
-              value={form.pic_id}
-              onChange={(event) => setForm((current) => ({ ...current, pic_id: event.target.value }))}
-              className={fieldClass}
-              style={{ color: PALETTE.ink }}
-            >
-              <option value="">Pilih nama organik</option>
-              {picOptions.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.nama}
-                  {user.jabatan ? ` - ${user.jabatan}` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          <div>
-            <span className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-              Organik Terlibat <span className="font-normal">(opsional)</span>
-            </span>
-
-            <div className="relative mb-1.5">
+            <div className="relative mb-2">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
                 style={{ color: PALETTE.slate }}
               />
               <input
                 type="search"
-                value={memberSearch}
-                onChange={(event) => setMemberSearch(event.target.value)}
-                placeholder="Cari pegawai..."
-                aria-label="Cari pegawai yang terlibat"
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                placeholder="Cari pegawai untuk semua baris..."
+                aria-label="Cari pegawai"
                 className={`${fieldClass} pl-8 text-xs`}
                 style={{ color: PALETTE.ink }}
               />
             </div>
 
-            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-[#E3EEFA] p-2">
-              {memberOptions.map((user) => (
-                <label
-                  key={user.id}
-                  className="flex min-h-8 cursor-pointer items-center gap-2 rounded px-1 text-xs hover:bg-[#F7F9FC]"
-                  style={{ color: PALETTE.ink }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.member_ids.includes(String(user.id))}
-                    onChange={() => toggleMember(String(user.id))}
-                    className="h-3.5 w-3.5 rounded border-[#5B6676]"
-                  />
-                  <span className="truncate">
-                    {user.nama}
-                    {user.jabatan ? (
-                      <span className="ml-1 text-[10px]" style={{ color: PALETTE.slate }}>
-                        {user.jabatan}
+            <div className="space-y-2">
+              {form.assignments.map((assignment, index) => {
+                const selectedInOtherRows = new Set(
+                  form.assignments
+                    .filter((item) => item.key !== assignment.key)
+                    .map((item) => Number(item.user_id))
+                    .filter(Boolean)
+                );
+                const options = filteredUsers.filter(
+                  (user) =>
+                    !selectedInOtherRows.has(user.id) ||
+                    String(user.id) === assignment.user_id
+                );
+                const rowPoints =
+                  (Number(assignment.volume) || 0) * (Number(form.bobot) || 0);
+
+                return (
+                  <div key={assignment.key} className="rounded-lg border border-[#F1F5FB] bg-[#FBFDFF] p-2.5">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-semibold" style={{ color: PALETTE.slate }}>
+                        Penugasan #{index + 1}
                       </span>
-                    ) : null}
-                  </span>
-                </label>
-              ))}
+                      <button
+                        type="button"
+                        onClick={() => removeAssignment(assignment.key)}
+                        disabled={form.assignments.length <= 1}
+                        aria-label={`Hapus penugasan #${index + 1}`}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition hover:bg-[#FEEBEB] disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ color: PALETTE.coral }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Hapus
+                      </button>
+                    </div>
 
-              {memberOptions.length === 0 && (
-                <p className="py-3 text-center text-[11px]" style={{ color: PALETTE.slate }}>
-                  Tidak ada pegawai yang cocok.
-                </p>
-              )}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                      <label className="sm:col-span-5">
+                        <span className="mb-0.5 block text-[10px]" style={{ color: PALETTE.slate }}>
+                          Pegawai
+                        </span>
+                        <select
+                          value={assignment.user_id}
+                          onChange={(event) =>
+                            updateAssignment(assignment.key, { user_id: event.target.value })
+                          }
+                          className={`${fieldClass} text-xs`}
+                          style={{ color: PALETTE.ink }}
+                          aria-label={`Pegawai penugasan #${index + 1}`}
+                        >
+                          <option value="">Pilih pegawai</option>
+                          {options.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.nama}
+                              {user.jabatan ? ` - ${user.jabatan}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="sm:col-span-3">
+                        <span className="mb-0.5 block text-[10px]" style={{ color: PALETTE.slate }}>
+                          Peran
+                        </span>
+                        <input
+                          type="text"
+                          maxLength={60}
+                          value={assignment.peran}
+                          onChange={(event) =>
+                            updateAssignment(assignment.key, { peran: event.target.value })
+                          }
+                          placeholder="PIC / Organik"
+                          className={`${fieldClass} text-xs`}
+                          style={{ color: PALETTE.ink }}
+                          aria-label={`Peran penugasan #${index + 1}`}
+                        />
+                      </label>
+
+                      <label className="sm:col-span-2">
+                        <span className="mb-0.5 block text-[10px]" style={{ color: PALETTE.slate }}>
+                          Volume
+                        </span>
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={assignment.volume}
+                          onChange={(event) =>
+                            updateAssignment(assignment.key, { volume: event.target.value })
+                          }
+                          className={`${fieldClass} text-xs`}
+                          style={{ color: PALETTE.ink }}
+                          aria-label={`Volume penugasan #${index + 1}`}
+                        />
+                      </label>
+
+                      <label className="sm:col-span-2">
+                        <span className="mb-0.5 block text-[10px]" style={{ color: PALETTE.slate }}>
+                          Satuan
+                        </span>
+                        <select
+                          value={assignment.satuan}
+                          onChange={(event) =>
+                            updateAssignment(assignment.key, { satuan: event.target.value })
+                          }
+                          className={`${fieldClass} text-xs`}
+                          style={{ color: PALETTE.ink }}
+                          aria-label={`Satuan penugasan #${index + 1}`}
+                        >
+                          {SATUAN_OPTIONS.map((satuan) => (
+                            <option key={satuan} value={satuan}>
+                              {satuan}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="sm:col-span-3">
+                        <span className="mb-0.5 block text-[10px]" style={{ color: PALETTE.slate }}>
+                          Mulai efektif
+                        </span>
+                        <input
+                          type="date"
+                          min={form.mulai || undefined}
+                          max={form.selesai || undefined}
+                          value={assignment.mulai}
+                          onChange={(event) =>
+                            updateAssignment(assignment.key, { mulai: event.target.value })
+                          }
+                          className={`${fieldClass} text-xs`}
+                          style={{ color: PALETTE.ink }}
+                          aria-label={`Tanggal mulai penugasan #${index + 1}`}
+                        />
+                      </label>
+
+                      <label className="sm:col-span-3">
+                        <span className="mb-0.5 block text-[10px]" style={{ color: PALETTE.slate }}>
+                          Selesai efektif
+                        </span>
+                        <input
+                          type="date"
+                          min={assignment.mulai || form.mulai || undefined}
+                          max={form.selesai || undefined}
+                          value={assignment.selesai}
+                          onChange={(event) =>
+                            updateAssignment(assignment.key, { selesai: event.target.value })
+                          }
+                          className={`${fieldClass} text-xs`}
+                          style={{ color: PALETTE.ink }}
+                          aria-label={`Tanggal selesai penugasan #${index + 1}`}
+                        />
+                      </label>
+
+                      <div className="flex items-end sm:col-span-6">
+                        <span className="text-[10px]" style={{ color: PALETTE.slate }}>
+                          Poin baris ini:{' '}
+                          <strong style={{ color: PALETTE.navy }}>
+                            {Math.round(rowPoints * 100) / 100}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {form.member_ids.length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {form.member_ids.map((id) => {
-                  const selected = users.find((user) => String(user.id) === id);
-                  if (!selected) return null;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => toggleMember(id)}
-                      className="rounded-full bg-[#E3EEFA] px-2 py-0.5 text-[10px] font-medium"
-                      style={{ color: PALETTE.navy }}
-                      title={`Hapus ${selected.nama}`}
-                    >
-                      {selected.nama} x
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={addAssignment}
+              className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg border border-dashed border-[#9CC3E5] px-2.5 text-[11px] font-semibold transition hover:bg-[#F7FBFF] focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ color: PALETTE.blue }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Tambah pegawai
+            </button>
           </div>
 
           <div>
@@ -463,7 +615,7 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
               id="activity-note"
               rows={3}
               value={form.keterangan}
-              onChange={(event) => setForm((current) => ({ ...current, keterangan: event.target.value }))}
+              onChange={(event) => updateForm('keterangan', event.target.value)}
               placeholder="Tambahkan keterangan kegiatan..."
               className="w-full rounded-lg border border-[#E3EEFA] bg-white px-3 py-2 text-sm outline-none transition focus:border-[#3B82C4] focus:ring-2 focus:ring-[#E3EEFA]"
               style={{ color: PALETTE.ink }}
@@ -474,9 +626,7 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
             <input
               type="checkbox"
               checked={form.kegiatan_besar}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, kegiatan_besar: event.target.checked }))
-              }
+              onChange={(event) => updateForm('kegiatan_besar', event.target.checked)}
               className="h-3.5 w-3.5 rounded border-[#5B6676]"
             />
             Tandai sebagai kegiatan besar
@@ -508,7 +658,7 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
               className="min-h-10 rounded-lg px-4 text-sm font-semibold text-white transition hover:brightness-95 disabled:opacity-50"
               style={{ backgroundColor: PALETTE.blue }}
             >
-              {saving ? 'Menyimpan...' : 'Simpan'}
+              {saving ? 'Menyimpan...' : 'Simpan Kegiatan & Penugasan'}
             </button>
           </div>
         </form>

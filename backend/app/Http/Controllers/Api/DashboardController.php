@@ -70,6 +70,7 @@ class DashboardController extends Controller
             $kegiatanBerjalan = $activities->filter(fn ($a) => $a->status === 'Berjalan')->count();
             $kegiatanSelesai = $activities->filter(fn ($a) => $a->status === 'Selesai')->count();
             $kegiatanTerlambat = $activities->filter(fn ($a) => $a->status === 'Terlambat')->count();
+            $kegiatanMendatang = $activities->filter(fn ($a) => $a->status === 'Belum Mulai')->count();
 
             // Peringatan beban kerja
             $warnings = $this->workloadService->getMonthlyWarnings($currentMonth);
@@ -84,9 +85,21 @@ class DashboardController extends Controller
                 'kegiatan_berjalan' => $kegiatanBerjalan,
                 'kegiatan_selesai' => $kegiatanSelesai,
                 'kegiatan_terlambat' => $kegiatanTerlambat,
+                'kegiatan_mendatang' => $kegiatanMendatang,
                 'total_peringatan_beban' => count($warnings),
                 'kendala_belum_selesai' => $kendalaAktif,
             ];
+
+            // Distribusi jumlah kegiatan per tim.
+            $data['distribusi_tim'] = Team::withCount('activities')
+                ->orderByDesc('activities_count')
+                ->get()
+                ->map(fn ($team) => [
+                    'id' => $team->id,
+                    'nama' => $team->nama,
+                    'jumlah' => $team->activities_count,
+                ])
+                ->values();
 
             // Aktivitas audit terbaru
             $data['audit_terbaru'] = AuditLog::with('user')

@@ -119,6 +119,105 @@ class ActivityManagementTest extends TestCase
     }
 
     /**
+     * Uji pembuatan kegiatan beserta penugasan awal tersimpan atomik dalam satu transaksi.
+     */
+    public function test_admin_can_create_activity_with_initial_assignments(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $team = Team::first();
+        $users = User::where('aktif', true)->orderBy('id')->take(2)->get();
+        $this->assertGreaterThanOrEqual(2, $users->count());
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->postJson('/api/activities', [
+            'nama' => 'Kegiatan Atomik Dengan Penugasan',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-02',
+            'selesai' => '2026-11-20',
+            'bobot' => 2,
+            'assignments' => [
+                [
+                    'user_id' => $users[0]->id,
+                    'peran' => 'PIC',
+                    'volume' => 5,
+                    'satuan' => 'Dokumen',
+                    'mulai' => '2026-11-02',
+                    'selesai' => '2026-11-10',
+                ],
+                [
+                    'user_id' => $users[1]->id,
+                    'peran' => 'Organik',
+                    'volume' => 3,
+                    'satuan' => 'Hari',
+                    'mulai' => '2026-11-05',
+                    'selesai' => '2026-11-20',
+                ],
+            ],
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonCount(2, 'data.assignments')
+            ->assertJsonPath('data.assignments.0.peran', 'PIC');
+
+        $activityId = (int) $response->json('data.id');
+
+        $this->assertDatabaseHas('assignments', [
+            'activity_id' => $activityId,
+            'user_id' => $users[0]->id,
+            'peran' => 'PIC',
+            'satuan' => 'Dokumen',
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $users[0]->id,
+            'tipe' => 'penugasan_baru',
+        ]);
+        $this->assertTrue(
+            AuditLog::where('objek', 'Assignment')->where('aksi', 'create')->exists()
+        );
+
+        Activity::find($activityId)?->forceDelete();
+    }
+
+    /**
+     * Uji penugasan awal di luar periode kegiatan ditolak dan tidak meninggalkan data setengah jadi.
+     */
+    public function test_create_activity_rejects_assignment_outside_activity_period(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $team = Team::first();
+        $user = User::where('aktif', true)->first();
+
+        Sanctum::actingAs($admin);
+
+        $before = Activity::withTrashed()->count();
+
+        $response = $this->postJson('/api/activities', [
+            'nama' => 'Kegiatan Penugasan Tidak Valid',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-05',
+            'selesai' => '2026-11-10',
+            'assignments' => [
+                [
+                    'user_id' => $user->id,
+                    'peran' => 'PIC',
+                    'volume' => 1,
+                    'satuan' => 'Hari',
+                    'mulai' => '2026-11-01',
+                    'selesai' => '2026-11-08',
+                ],
+            ],
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors('assignments.0.mulai');
+
+        $this->assertSame($before, Activity::withTrashed()->count());
+    }
+
+    /**
      * Uji Ketua Tim hanya dapat membuat kegiatan pada tim yang dipimpinnya.
      */
     public function test_ketua_tim_can_only_create_activity_for_led_team(): void
