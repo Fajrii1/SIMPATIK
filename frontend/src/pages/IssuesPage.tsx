@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -21,6 +21,28 @@ export const IssuesPage: React.FC = () => {
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [allowPegawaiIssue, setAllowPegawaiIssue] = useState(false);
+
+  const reportableTeams = useMemo(() => {
+    if (user?.peran === 'admin') return teams;
+    return teams.filter(
+      (team) =>
+        team.ketua_id === user?.id ||
+        team.members?.some((member) => member.id === user?.id)
+    );
+  }, [teams, user]);
+
+  const canReportIssue = useMemo(() => {
+    if (user?.peran === 'admin') return true;
+    if (teams.some((team) => team.ketua_id === user?.id)) return true;
+    return allowPegawaiIssue && reportableTeams.length > 0;
+  }, [user, teams, allowPegawaiIssue, reportableTeams]);
+
+  const canManageIssue = (item: WeeklyIssue) =>
+    user?.peran === 'admin' ||
+    teams.some((team) => team.id === item.team_id && team.ketua_id === user?.id) ||
+    item.pic_id === user?.id;
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -42,8 +64,36 @@ export const IssuesPage: React.FC = () => {
     catatan_penutupan: '',
   });
 
+  const fetchTeams = async () => {
+    try {
+      const res = await api.get('/teams');
+      setTeams(res.data.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const res = await api.get('/settings');
+      setAllowPegawaiIssue(Boolean(res.data?.settings?.pegawai_boleh_isi_kendala));
+    } catch {
+      setAllowPegawaiIssue(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTeams();
+    fetchSettings();
+  }, []);
+
+  useEffect(() => {
+    fetchIssues();
+  }, [selectedTeam, selectedStatus]);
+
   const fetchIssues = async () => {
     setLoading(true);
+    setError('');
     try {
       const [issueRes, carriedRes] = await Promise.all([
         api.get('/issues', {
@@ -60,29 +110,13 @@ export const IssuesPage: React.FC = () => {
       ]);
       setIssues(issueRes.data.data);
       setCarriedIssues(carriedRes.data.data);
-    } catch (err) {
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Gagal memuat data kendala mingguan.');
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
-
-  const fetchTeams = async () => {
-    try {
-      const res = await api.get('/teams');
-      setTeams(res.data.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    fetchTeams();
-  }, []);
-
-  useEffect(() => {
-    fetchIssues();
-  }, [selectedTeam, selectedStatus]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,13 +166,15 @@ export const IssuesPage: React.FC = () => {
             Pencatatan hambatan lapangan, eskalasi ke pimpinan, dan pemantauan tindak lanjut
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-xs transition"
-        >
-          <Plus className="w-4 h-4" />
-          Laporkan Kendala
-        </button>
+        {canReportIssue && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-xs transition"
+          >
+            <Plus className="w-4 h-4" />
+            Laporkan Kendala
+          </button>
+        )}
       </div>
 
       {/* Carried Issues Warning Section */}
@@ -200,6 +236,12 @@ export const IssuesPage: React.FC = () => {
         </select>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {loading ? (
@@ -251,20 +293,24 @@ export const IssuesPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => {
-                          setActiveIssue(item);
-                          setStatusFormData({
-                            status: item.status,
-                            solusi: item.solusi || '',
-                            tindak_lanjut: item.tindak_lanjut || '',
-                            catatan_penutupan: item.catatan_penutupan || '',
-                          });
-                        }}
-                        className="text-xs text-sky-600 hover:text-sky-700 font-semibold"
-                      >
-                        Kelola
-                      </button>
+                      {canManageIssue(item) ? (
+                        <button
+                          onClick={() => {
+                            setActiveIssue(item);
+                            setStatusFormData({
+                              status: item.status,
+                              solusi: item.solusi || '',
+                              tindak_lanjut: item.tindak_lanjut || '',
+                              catatan_penutupan: item.catatan_penutupan || '',
+                            });
+                          }}
+                          className="text-xs text-sky-600 hover:text-sky-700 font-semibold"
+                        >
+                          Kelola
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">Lihat</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -289,7 +335,7 @@ export const IssuesPage: React.FC = () => {
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600"
                 >
                   <option value="">Pilih Tim</option>
-                  {teams.map((t) => (
+                  {reportableTeams.map((t) => (
                     <option key={t.id} value={t.id}>{t.nama}</option>
                   ))}
                 </select>
