@@ -328,7 +328,7 @@ export const MainLayout: React.FC = () => {
                       role="menuitem"
                     >
                       <UserIcon className="w-4 h-4" />
-                      Pengaturan
+                      Profil & Keamanan Akun
                     </Link>
                     <button
                       onClick={() => {
