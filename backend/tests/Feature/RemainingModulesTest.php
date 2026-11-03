@@ -307,4 +307,130 @@ class RemainingModulesTest extends TestCase
         $this->getJson('/api/reports/activities?format=csv')->assertOk();
         $this->getJson("/api/reports/activities?format=csv&team_id={$otherTeam->id}")->assertOk();
     }
+
+    /**
+     * Uji catatan penutupan wajib diisi saat kendala berstatus selesai.
+     */
+    public function test_closing_issue_requires_closure_note(): void
+    {
+        Sanctum::actingAs($this->ketua);
+        $monday = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
+
+        $created = $this->postJson('/api/issues', [
+            'team_id' => $this->team->id,
+            'minggu_mulai' => $monday,
+            'kendala' => 'Kendala untuk uji catatan penutupan wajib.',
+        ]);
+        $created->assertCreated();
+        $issueId = $created->json('data.id');
+
+        try {
+            $this->patchJson("/api/issues/{$issueId}/status", [
+                'status' => StatusKendala::SELESAI->value,
+            ])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('catatan_penutupan');
+
+            $this->patchJson("/api/issues/{$issueId}/status", [
+                'status' => StatusKendala::SELESAI->value,
+                'catatan_penutupan' => 'Kendala sudah ditangani dan diverifikasi.',
+            ])->assertOk()->assertJsonPath('data.status', 'selesai');
+        } finally {
+            WeeklyIssue::find($issueId)?->forceDelete();
+        }
+    }
+
+    /**
+     * Uji pegawai anggota tim dapat melaporkan kendala saat pengaturan bawaan aktif.
+     */
+    public function test_team_member_can_report_issue_with_default_setting(): void
+    {
+        $this->assertTrue(
+            filter_var(Setting::getVal('pegawai_boleh_isi_kendala', true), FILTER_VALIDATE_BOOLEAN)
+        );
+
+        Sanctum::actingAs($this->pegawai);
+        $monday = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
+
+        $response = $this->postJson('/api/issues', [
+            'team_id' => $this->team->id,
+            'minggu_mulai' => $monday,
+            'kendala' => 'Kendala dilaporkan anggota tim saat pengaturan bawaan aktif.',
+        ]);
+
+        $response->assertCreated();
+        WeeklyIssue::find($response->json('data.id'))?->forceDelete();
+    }
+
+    /**
+     * Uji pimpinan yang bukan anggota maupun ketua tim tidak boleh melaporkan kendala.
+     */
+    public function test_non_member_pimpinan_cannot_report_issue(): void
+    {
+        $pimpinan = User::firstOrCreate(
+            ['email' => 'pimpinan_kendala_rm@contoh.test'],
+            [
+                'nama' => 'Pimpinan Kendala RM',
+                'nip' => '198801012010011995',
+                'jabatan' => 'Kepala BPS',
+                'password' => 'password',
+                'peran' => PeranPengguna::PIMPINAN,
+                'aktif' => true,
+                'must_change_password' => false,
+            ]
+        );
+
+        Sanctum::actingAs($pimpinan);
+        $monday = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
+
+        $this->postJson('/api/issues', [
+            'team_id' => $this->team->id,
+            'minggu_mulai' => $monday,
+            'kendala' => 'Percobaan kendala oleh pimpinan nonanggota.',
+        ])->assertForbidden();
+    }
+
+    /**
+     * Uji ketua tim hanya melihat beban kerja anggota tim yang dipimpinnya.
+     */
+    public function test_ketua_workload_only_covers_led_team_members(): void
+    {
+        $otherTeam = Team::firstOrCreate(
+            ['nama' => 'Tim Luar Beban Ketua Uji'],
+            ['keterangan' => 'Tim pembanding beban kerja', 'ketua_id' => null]
+        );
+
+        $outsideUser = User::firstOrCreate(
+            ['email' => 'pegawai_luar_ketua_rm@contoh.test'],
+            [
+                'nama' => 'Pegawai Luar Ketua RM',
+                'nip' => '198801012010011996',
+                'jabatan' => 'Statistisi Pertama',
+                'password' => 'password',
+                'peran' => PeranPengguna::PEGAWAI,
+                'aktif' => true,
+                'must_change_password' => false,
+            ]
+        );
+        $otherTeam->members()->syncWithoutDetaching([$outsideUser->id]);
+
+        Sanctum::actingAs($this->ketua);
+        $currentMonth = Carbon::now()->format('Y-m');
+
+        $response = $this->getJson("/api/workload?month={$currentMonth}");
+        $response->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('user.id')->all();
+        $this->assertContains($this->ketua->id, $ids);
+        $this->assertContains($this->pegawai->id, $ids);
+        $this->assertNotContains($outsideUser->id, $ids);
+
+        // Meminta tim lain tetap dibatasi ke tim yang dipimpin.
+        $filtered = $this->getJson("/api/workload?month={$currentMonth}&team_id={$otherTeam->id}");
+        $filtered->assertOk();
+        $filteredIds = collect($filtered->json('data'))->pluck('user.id')->all();
+        $this->assertNotContains($outsideUser->id, $filteredIds);
+
+        $this->getJson("/api/workload/users/{$outsideUser->id}")->assertForbidden();
+    }
 }

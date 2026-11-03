@@ -25,7 +25,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Login berhasil.',
-            'user' => new UserResource($request->user()),
+            'user' => new UserResource($request->user()->load(['teams', 'ledTeams'])),
         ]);
     }
 
@@ -51,9 +51,11 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
+        $user = $request->user()->load(['teams', 'ledTeams']);
+
         return response()->json([
-            'data' => new UserResource($request->user()),
-            'user' => new UserResource($request->user()),
+            'data' => new UserResource($user),
+            'user' => new UserResource($user),
         ]);
     }
 
@@ -71,7 +73,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Kata sandi berhasil diubah.',
-            'user' => new UserResource($user->fresh()),
+            'user' => new UserResource($user->fresh()->load(['teams', 'ledTeams'])),
         ]);
     }
 }

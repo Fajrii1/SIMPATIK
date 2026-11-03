@@ -176,7 +176,7 @@ class DatabaseDataIntegrityTest extends TestCase
         $this->assertEquals('100', Setting::getVal('ambang_beban_bulanan'));
         $this->assertEquals('3', Setting::getVal('maks_penugasan_bersamaan'));
         $this->assertEquals('3', Setting::getVal('maks_kegiatan_besar_bersamaan'));
-        $this->assertEquals('false', Setting::getVal('pegawai_boleh_isi_kendala'));
+        $this->assertEquals('true', Setting::getVal('pegawai_boleh_isi_kendala'));
     }
 
     /**

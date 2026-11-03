@@ -8,6 +8,7 @@ import {
   Loader2,
   ChevronRight,
   ShieldAlert,
+  X,
 } from 'lucide-react';
 import { WorkloadSummary, WorkloadWarning, Team } from '../types';
 
@@ -343,7 +344,7 @@ export const WorkloadPage: React.FC = () => {
                 aria-label="Tutup modal rincian"
                 className="text-slate-400 hover:text-slate-600 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -383,7 +384,7 @@ export const WorkloadPage: React.FC = () => {
                           <div>
                             <p className="font-semibold text-slate-800">{as.kegiatan}</p>
                             <p className="text-slate-500 mt-0.5">
-                              {as.tim} • Peran: <span className="font-medium text-slate-700">{as.peran}</span> • Vol: {as.volume} {as.satuan}
+                              {as.tim} | Peran: <span className="font-medium text-slate-700">{as.peran}</span> | Vol: {as.volume} {as.satuan}
                             </p>
                             <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                               {as.tanggal_mulai} s.d. {as.tanggal_selesai}

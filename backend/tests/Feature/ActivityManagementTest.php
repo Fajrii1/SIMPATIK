@@ -402,16 +402,98 @@ class ActivityManagementTest extends TestCase
             ]);
             $response->assertStatus(200);
 
-            // Verifikasi notifikasi terkirim ke pegawai
+            // Verifikasi notifikasi terkirim ke pegawai.
+            // Urutkan berdasarkan id agar tidak bergantung pada presisi detik created_at.
             $notification = Notification::where('user_id', $pegawai->id)
                 ->where('tipe', 'jadwal_berubah')
-                ->latest()
+                ->latest('id')
                 ->first();
 
             $this->assertNotNull($notification);
             $this->assertStringContainsString('Survei Uji Notifikasi Jadwal', $notification->pesan);
         } finally {
             $assignment->forceDelete();
+            $activity->forceDelete();
+        }
+    }
+
+    /**
+     * Uji batas bobot kegiatan 0,50 sampai 3,00 pada pembuatan kegiatan.
+     */
+    public function test_activity_weight_must_be_between_half_and_three_on_create(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $team = Team::first();
+        $this->assertNotNull($admin);
+        $this->assertNotNull($team);
+
+        Sanctum::actingAs($admin);
+
+        $basePayload = [
+            'nama' => 'Kegiatan Uji Batas Bobot',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-01',
+            'selesai' => '2026-11-10',
+        ];
+
+        $this->postJson('/api/activities', $basePayload + ['bobot' => 0.49])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('bobot');
+
+        $this->postJson('/api/activities', $basePayload + ['bobot' => 3.01])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('bobot');
+
+        $lower = $this->postJson('/api/activities', $basePayload + ['bobot' => 0.5]);
+        $lower->assertStatus(201)->assertJsonPath('data.bobot', 0.5);
+
+        $upper = $this->postJson('/api/activities', $basePayload + ['bobot' => 3.0]);
+        $upper->assertStatus(201)->assertJsonPath('data.bobot', 3);
+
+        Activity::find($lower->json('data.id'))?->forceDelete();
+        Activity::find($upper->json('data.id'))?->forceDelete();
+    }
+
+    /**
+     * Uji batas bobot kegiatan 0,50 sampai 3,00 pada pembaruan kegiatan.
+     */
+    public function test_activity_weight_must_be_between_half_and_three_on_update(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $team = Team::first();
+        $this->assertNotNull($admin);
+        $this->assertNotNull($team);
+
+        $activity = Activity::create([
+            'nama' => 'Kegiatan Uji Batas Bobot Update',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-01',
+            'selesai' => '2026-11-10',
+            'bobot' => 1.0,
+            'selesai_manual' => false,
+        ]);
+
+        try {
+            Sanctum::actingAs($admin);
+
+            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 0.49])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('bobot');
+
+            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 3.01])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('bobot');
+
+            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 0.5])
+                ->assertOk()
+                ->assertJsonPath('data.bobot', 0.5);
+
+            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 3.0])
+                ->assertOk()
+                ->assertJsonPath('data.bobot', 3);
+        } finally {
             $activity->forceDelete();
         }
     }

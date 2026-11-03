@@ -147,8 +147,9 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
     if (form.selesai < form.mulai) return 'Tanggal selesai tidak boleh sebelum tanggal mulai.';
 
     const bobot = Number(form.bobot);
-    if (!Number.isFinite(bobot) || bobot <= 0) return 'Bobot kegiatan harus lebih besar dari 0.';
-    if (bobot > 99.99) return 'Bobot kegiatan maksimal 99.99.';
+    if (!Number.isFinite(bobot) || bobot < 0.5 || bobot > 3) {
+      return 'Bobot kesulitan harus berada di antara 0,50 dan 3,00.';
+    }
 
     if (form.assignments.length === 0) {
       return 'Tambahkan minimal satu pegawai yang ditugaskan.';
@@ -381,20 +382,23 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
 
             <div>
               <label htmlFor="activity-weight" className="mb-1 block text-xs font-semibold" style={{ color: PALETTE.ink }}>
-                Bobot <span style={{ color: PALETTE.coral }}>*</span>
+                Bobot Kesulitan (0,50 - 3,00) <span style={{ color: PALETTE.coral }}>*</span>
               </label>
               <input
                 id="activity-weight"
                 required
                 type="number"
-                min={0.01}
-                max={99.99}
-                step={0.01}
+                min={0.5}
+                max={3}
+                step={0.05}
                 value={form.bobot}
                 onChange={(event) => updateForm('bobot', event.target.value)}
                 className={fieldClass}
                 style={{ color: PALETTE.ink }}
               />
+              <p className="mt-1 text-[10px]" style={{ color: PALETTE.slate }}>
+                1,00 = pekerjaan standar, di atas 1 lebih berat, di bawah 1 lebih ringan
+              </p>
             </div>
           </div>
 

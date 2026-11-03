@@ -57,7 +57,7 @@ export const DashboardPage: React.FC = () => {
             Selamat Datang, {user?.nama}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Jabatan: <span className="font-medium text-slate-700">{user?.jabatan || 'Aparatur BPS'}</span> • Peran:{' '}
+            Jabatan: <span className="font-medium text-slate-700">{user?.jabatan || 'Aparatur BPS'}</span> | Peran:{' '}
             <span className="font-semibold text-sky-700 capitalize">{user?.peran}</span>
           </p>
         </div>
@@ -389,7 +389,7 @@ export const DashboardPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-xs text-slate-600 space-y-1">
-                    <p><span className="text-slate-400">Tim:</span> {item.tim} • <span className="text-slate-400">Peran:</span> {item.peran}</p>
+                    <p><span className="text-slate-400">Tim:</span> {item.tim} | <span className="text-slate-400">Peran:</span> {item.peran}</p>
                     <p><span className="text-slate-400">Periode:</span> {item.mulai} s.d. {item.selesai}</p>
                   </div>
                   <div className="pt-2 border-t border-slate-200/60 flex justify-between items-center text-xs">

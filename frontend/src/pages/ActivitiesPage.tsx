@@ -12,8 +12,10 @@ import {
   Eye,
   UserCheck,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { Activity, Team, User, Assignment, AssignmentPreviewResult } from '../types';
+import { getApiErrorMessage } from '../services/errors';
 
 export const ActivitiesPage: React.FC = () => {
   const { user } = useAuth();
@@ -35,10 +37,14 @@ export const ActivitiesPage: React.FC = () => {
     team_id: '',
     mulai: '',
     selesai: '',
-    bobot: 1.0,
+    bobot: '1.0',
     kegiatan_besar: false,
     keterangan: '',
   });
+  const [activityError, setActivityError] = useState('');
+  const [assignmentError, setAssignmentError] = useState('');
+  const [previewError, setPreviewError] = useState('');
+  const [pageError, setPageError] = useState('');
 
   // Modal Detail & Manajemen Penugasan
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
@@ -94,10 +100,8 @@ export const ActivitiesPage: React.FC = () => {
     fetchActivities();
   }, [search, selectedTeam, selectedStatus]);
 
-  // Hak Cipta Akses Tambah Kegiatan: Admin atau Ketua Tim
-  const canCreate =
-    user?.peran === 'admin' ||
-    (user?.teams && user.teams.some((t) => teams.some((tm) => tm.id === t.id && tm.ketua_id === user.id)));
+  // Hak akses tambah kegiatan: admin atau ketua tim.
+  const canCreate = user?.peran === 'admin' || Boolean(user?.is_ketua);
 
   // Buka Form Tambah Kegiatan
   const handleOpenCreate = () => {
@@ -108,10 +112,11 @@ export const ActivitiesPage: React.FC = () => {
       team_id: teams[0]?.id ? String(teams[0].id) : '',
       mulai: '',
       selesai: '',
-      bobot: 1.0,
+      bobot: '1.0',
       kegiatan_besar: false,
       keterangan: '',
     });
+    setActivityError('');
     setShowModal(true);
   };
 
@@ -124,21 +129,30 @@ export const ActivitiesPage: React.FC = () => {
       team_id: String(act.team_id),
       mulai: act.mulai,
       selesai: act.selesai,
-      bobot: act.bobot,
+      bobot: String(act.bobot),
       kegiatan_besar: act.kegiatan_besar,
       keterangan: act.keterangan || '',
     });
+    setActivityError('');
     setShowModal(true);
   };
 
   // Simpan Kegiatan (Create/Update)
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
+    setActivityError('');
+
+    const bobotValue = parseFloat(formData.bobot);
+    if (!Number.isFinite(bobotValue) || bobotValue < 0.5 || bobotValue > 3) {
+      setActivityError('Bobot kesulitan harus berada di antara 0,50 dan 3,00.');
+      return;
+    }
+
     setModalLoading(true);
     try {
       const payload = {
         ...formData,
-        bobot: parseFloat(formData.bobot.toString()),
+        bobot: bobotValue,
         team_id: parseInt(formData.team_id),
       };
 
@@ -150,8 +164,8 @@ export const ActivitiesPage: React.FC = () => {
 
       setShowModal(false);
       fetchActivities();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menyimpan kegiatan statistik.');
+    } catch (err: unknown) {
+      setActivityError(getApiErrorMessage(err, 'Gagal menyimpan kegiatan statistik.'));
     } finally {
       setModalLoading(false);
     }
@@ -160,11 +174,12 @@ export const ActivitiesPage: React.FC = () => {
   // Hapus Kegiatan
   const handleDeleteActivity = async (act: Activity) => {
     if (!confirm(`Yakin ingin menghapus kegiatan "${act.nama}"?`)) return;
+    setPageError('');
     try {
       await api.delete(`/activities/${act.id}`);
       fetchActivities();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menghapus kegiatan.');
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal menghapus kegiatan.'));
     }
   };
 
@@ -172,11 +187,12 @@ export const ActivitiesPage: React.FC = () => {
   const handleToggleComplete = async (act: Activity) => {
     const isCompleted = act.status === 'Selesai';
     const endpoint = isCompleted ? `/activities/${act.id}/reopen` : `/activities/${act.id}/complete`;
+    setPageError('');
     try {
       await api.patch(endpoint);
       fetchActivities();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal memperbarui status kegiatan.');
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal memperbarui status kegiatan.'));
     }
   };
 
@@ -202,6 +218,8 @@ export const ActivitiesPage: React.FC = () => {
   const handleOpenAddAssignment = () => {
     setEditingAssignment(null);
     setPreviewResult(null);
+    setAssignmentError('');
+    setPreviewError('');
     setAssignmentForm({
       user_id: teamMembers[0]?.id ? String(teamMembers[0].id) : '',
       peran: 'Pencacah',
@@ -216,6 +234,7 @@ export const ActivitiesPage: React.FC = () => {
   // Preview Beban Kerja Sebelum Menyimpan Penugasan
   const handlePreviewAssignment = async () => {
     if (!selectedActivity || !assignmentForm.user_id) return;
+    setPreviewError('');
     setPreviewLoading(true);
     try {
       const res = await api.post('/assignments/preview', {
@@ -229,8 +248,8 @@ export const ActivitiesPage: React.FC = () => {
         assignment_id: editingAssignment?.id,
       });
       setPreviewResult(res.data.data);
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menghitung pratinjau beban kerja.');
+    } catch (err: unknown) {
+      setPreviewError(getApiErrorMessage(err, 'Gagal menghitung pratinjau beban kerja.'));
     } finally {
       setPreviewLoading(false);
     }
@@ -240,6 +259,7 @@ export const ActivitiesPage: React.FC = () => {
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedActivity) return;
+    setAssignmentError('');
     try {
       const payload = {
         activity_id: selectedActivity.id,
@@ -260,20 +280,21 @@ export const ActivitiesPage: React.FC = () => {
       setShowAssignmentModal(false);
       handleOpenAssignments(selectedActivity);
       fetchActivities();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menyimpan penugasan pegawai.');
+    } catch (err: unknown) {
+      setAssignmentError(getApiErrorMessage(err, 'Gagal menyimpan penugasan pegawai.'));
     }
   };
 
   // Hapus Penugasan
   const handleDeleteAssignment = async (as: Assignment) => {
     if (!confirm(`Hapus penugasan untuk ${as.user?.nama}?`)) return;
+    setAssignmentError('');
     try {
       await api.delete(`/assignments/${as.id}`);
       if (selectedActivity) handleOpenAssignments(selectedActivity);
       fetchActivities();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menghapus penugasan.');
+    } catch (err: unknown) {
+      setAssignmentError(getApiErrorMessage(err, 'Gagal menghapus penugasan.'));
     }
   };
 
@@ -297,6 +318,13 @@ export const ActivitiesPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {pageError && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0" />
+          <span>{pageError}</span>
+        </div>
+      )}
 
       {/* Filter and Search */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3">
@@ -461,7 +489,7 @@ export const ActivitiesPage: React.FC = () => {
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <h3 className="font-semibold text-slate-900 text-sm leading-snug">{act.nama}</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">{act.team?.nama} • {act.jenis}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{act.team?.nama} | {act.jenis}</p>
                     </div>
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
@@ -591,7 +619,7 @@ export const ActivitiesPage: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Bobot Kesulitan (0.50 - 3.00)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Bobot Kesulitan (0,50 - 3,00)</label>
                   <input
                     type="number"
                     step="0.05"
@@ -599,9 +627,12 @@ export const ActivitiesPage: React.FC = () => {
                     max="3"
                     required
                     value={formData.bobot}
-                    onChange={(e) => setFormData({ ...formData, bobot: parseFloat(e.target.value) || 1.0 })}
+                    onChange={(e) => setFormData({ ...formData, bobot: e.target.value })}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    1,00 = pekerjaan standar, di atas 1 lebih berat, di bawah 1 lebih ringan
+                  </p>
                 </div>
 
                 <div className="pt-2 sm:pt-4 flex items-center gap-2">
@@ -628,6 +659,13 @@ export const ActivitiesPage: React.FC = () => {
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600"
                 />
               </div>
+
+              {activityError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{activityError}</span>
+                </p>
+              )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
@@ -660,7 +698,7 @@ export const ActivitiesPage: React.FC = () => {
                   Penugasan Petugas: {selectedActivity.nama}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Tim: {selectedActivity.team?.nama} • Periode: {selectedActivity.mulai} s.d. {selectedActivity.selesai} • Bobot: {selectedActivity.bobot}
+                  Tim: {selectedActivity.team?.nama} | Periode: {selectedActivity.mulai} s.d. {selectedActivity.selesai} | Bobot: {selectedActivity.bobot}
                 </p>
               </div>
               <button
@@ -668,7 +706,7 @@ export const ActivitiesPage: React.FC = () => {
                 aria-label="Tutup modal penugasan"
                 className="text-slate-400 hover:text-slate-600 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -682,6 +720,13 @@ export const ActivitiesPage: React.FC = () => {
                 <Plus className="w-3.5 h-3.5" /> Tambah Petugas
               </button>
             </div>
+
+            {assignmentError && (
+              <p role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                <span>{assignmentError}</span>
+              </p>
+            )}
 
             {/* List Penugasan */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2">
@@ -697,7 +742,7 @@ export const ActivitiesPage: React.FC = () => {
                     <div>
                       <p className="font-bold text-slate-900">{as.user?.nama}</p>
                       <p className="text-slate-500">
-                        Peran: <strong className="text-slate-700">{as.peran}</strong> • Volume: {as.volume} {as.satuan} • Poin Beban: <strong>{as.poin_beban} pt</strong>
+                        Peran: <strong className="text-slate-700">{as.peran}</strong> | Volume: {as.volume} {as.satuan} | Poin Beban: <strong>{as.poin_beban} pt</strong>
                       </p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                         {as.effective_mulai} s.d. {as.effective_selesai}
@@ -825,6 +870,13 @@ export const ActivitiesPage: React.FC = () => {
                 </button>
               </div>
 
+              {previewError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{previewError}</span>
+                </p>
+              )}
+
               {/* Box Hasil Preview */}
               {previewResult && (
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
@@ -841,12 +893,25 @@ export const ActivitiesPage: React.FC = () => {
                     <span className="font-bold text-slate-800">{previewResult.concurrent_assignments_peak} tugas</span>
                   </div>
                   {previewResult.is_over_threshold && (
-                    <p className="text-rose-600 font-bold mt-1">⚠️ Melebihi ambang batas bulanan!</p>
+                    <p className="flex items-center gap-1 text-rose-600 font-bold mt-1">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Melebihi ambang batas bulanan!
+                    </p>
                   )}
                   {previewResult.has_concurrency_warning && (
-                    <p className="text-amber-600 font-bold">⚠️ Melebihi batas aman penugasan bersamaan!</p>
+                    <p className="flex items-center gap-1 text-amber-600 font-bold">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Melebihi batas aman penugasan bersamaan!
+                    </p>
                   )}
                 </div>
+              )}
+
+              {assignmentError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{assignmentError}</span>
+                </p>
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

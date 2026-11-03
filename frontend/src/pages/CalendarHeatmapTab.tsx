@@ -91,7 +91,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
             Jumlah kegiatan yang berjalan pada setiap tanggal. Klik tanggal untuk melihat daftarnya.
           </p>
           <p className="mt-1 text-[10px] font-medium" style={{ color: PALETTE.slate }}>
-            {activeDays} hari aktif • kepadatan tertinggi {maxCount} kegiatan/hari
+            {activeDays} hari aktif | kepadatan tertinggi {maxCount} kegiatan/hari
           </p>
         </div>
 

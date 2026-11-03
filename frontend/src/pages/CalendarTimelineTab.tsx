@@ -79,7 +79,7 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
           style={{ backgroundColor: PALETTE.paleBlue, color: PALETTE.navy }}
         >
           <CalendarRange className="h-3 w-3" />
-          {events.length} kegiatan • {totalGroups} tim
+          {events.length} kegiatan | {totalGroups} tim
         </span>
       </div>
 
@@ -195,7 +195,7 @@ const TimelineGroup: React.FC<TimelineGroupProps> = ({
         {teamEvents.map((event) => {
           const position = getTimelinePosition(event, year);
           const period = formatDateRange(event.start, getEventInclusiveEnd(event));
-          const tooltip = `${event.title}\n${teamName} • ${event.extendedProps.status}\n${period}`;
+          const tooltip = `${event.title}\n${teamName} | ${event.extendedProps.status}\n${period}`;
 
           return (
             <div

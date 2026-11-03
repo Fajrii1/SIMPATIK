@@ -155,3 +155,18 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
   - `DemoDataSeeder` idempoten (updateOrCreate/syncWithoutDetaching).
   - Test berjalan di database `jadwal_bps_test` yang dipaksa oleh phpunit.xml, sedangkan perintah artisan manual selalu memakai `.env` sehingga harus memperhatikan `DB_DATABASE`.
 - **Alasan:** Menjaga database development tetap bersih, test reproducible dari database kosong, dan tidak mengubah PRD.
+
+---
+
+## 11. Keputusan Aturan Akses dan Skala
+
+- **Konteks:** Peninjauan Tahap 1 menemukan celah validasi bobot kegiatan, penafsiran pengaturan kendala, kewajiban catatan penutupan, perbandingan ID yang longgar, dan tampilan menu laporan yang belum mengikuti peran ketua tim.
+- **Keputusan:**
+  1. **Skala Bobot Kegiatan:** Bobot kesulitan kegiatan dibatasi pada rentang 0,50 sampai 3,00 dengan nilai bawaan 1,00. Nilai di luar rentang ditolak di backend (HTTP 422) dan dicegah di frontend. Angka 1,00 berarti pekerjaan standar, di atas 1 lebih berat, dan di bawah 1 lebih ringan.
+  2. **Pengaturan `pegawai_boleh_isi_kendala`:** Nilai bawaan untuk instalasi baru adalah `true`. Seeder hanya membuat nilai tersebut jika belum ada sehingga nilai yang sudah diubah admin tidak tertimpa. Pembacaan nilai dilakukan dengan `filter_var(..., FILTER_VALIDATE_BOOLEAN)` agar string `'false'` tidak dianggap benar.
+  3. **Pelapor Kendala:** Yang boleh melaporkan kendala adalah anggota tim, ketua tim, dan admin. Pimpinan hanya boleh melaporkan bila juga menjabat ketua atau menjadi anggota tim. Pengaturan `pegawai_boleh_isi_kendala` memperluas izin bagi pegawai anggota tim, tetapi tidak membuka akses ke tim lain.
+  4. **Catatan Penutupan:** Status kendala `selesai` mewajibkan `catatan_penutupan` diisi. Permintaan tanpa catatan ditolak dengan HTTP 422 dan pesan validasi berbahasa Indonesia.
+  5. **Hak Akses Beban Kerja:** Ketua tim hanya dapat melihat ringkasan dan rincian beban kerja anggota tim yang dipimpinnya. Perbandingan ID tim dan pengguna dilakukan secara ketat (`in_array(..., true)` dengan konversi `(int)`) agar tipe data yang berbeda tidak lolos pemeriksaan.
+  6. **Menu Laporan:** Rute dan menu Laporan & Ekspor hanya ditampilkan untuk admin, pimpinan, dan pengguna yang menjabat ketua tim. Backend tetap menegakkan aturan ekspor yang sama.
+  7. **Penanda Ketua pada Profil:** Endpoint login, `/api/me`, dan respons pengguna menyertakan `is_ketua` serta `led_team_ids` bila relasi `ledTeams` dimuat, sehingga frontend tidak perlu menebak status ketua dari daftar tim.
+- **Alasan:** Menutup celah otorisasi dan validasi tanpa mengubah PRD, warna, atau dependensi, serta menjaga data pengaturan yang sudah ada.

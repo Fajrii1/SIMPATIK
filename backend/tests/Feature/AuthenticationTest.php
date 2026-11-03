@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\PeranPengguna;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -217,6 +218,30 @@ class AuthenticationTest extends TestCase
                 'password',
                 'remember_token',
             ]);
+    }
+
+    /**
+     * Uji endpoint /api/me mengirimkan penanda ketua tim dan daftar tim yang dipimpin.
+     */
+    public function test_me_endpoint_exposes_ketua_flags(): void
+    {
+        $ketua = User::where('email', 'ketua1@contoh.test')->first();
+        $this->assertNotNull($ketua);
+
+        Sanctum::actingAs($ketua);
+        $this->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonPath('user.is_ketua', true)
+            ->assertJsonPath('user.led_team_ids', Team::where('ketua_id', $ketua->id)->pluck('id')->all());
+
+        $pegawai = User::where('email', 'pegawai02@contoh.test')->first();
+        $this->assertNotNull($pegawai);
+
+        Sanctum::actingAs($pegawai);
+        $this->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonPath('user.is_ketua', false)
+            ->assertJsonPath('user.led_team_ids', []);
     }
 
     /**

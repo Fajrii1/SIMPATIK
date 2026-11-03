@@ -33,6 +33,12 @@ class UserResource extends JsonResource
                     ];
                 });
             }),
+            'is_ketua' => $this->whenLoaded('ledTeams', fn () => $this->ledTeams->isNotEmpty()),
+            'led_team_ids' => $this->whenLoaded('ledTeams', fn () => $this->ledTeams
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all()),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

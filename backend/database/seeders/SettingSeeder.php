@@ -25,10 +25,6 @@ class SettingSeeder extends Seeder
                 'kunci' => 'maks_kegiatan_besar_bersamaan',
                 'nilai' => '3',
             ],
-            [
-                'kunci' => 'pegawai_boleh_isi_kendala',
-                'nilai' => 'false',
-            ],
         ];
 
         foreach ($settings as $setting) {
@@ -37,5 +33,11 @@ class SettingSeeder extends Seeder
                 ['nilai' => $setting['nilai']]
             );
         }
+
+        // Nilai bawaan untuk instalasi baru; nilai yang sudah tersimpan tidak ditimpa.
+        Setting::firstOrCreate(
+            ['kunci' => 'pegawai_boleh_isi_kendala'],
+            ['nilai' => 'true']
+        );
     }
 }

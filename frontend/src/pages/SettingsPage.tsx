@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Settings as SettingsIcon, Save, Loader2, Check } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Loader2, Check, AlertTriangle } from 'lucide-react';
+import { getApiErrorMessage } from '../services/errors';
 
 export const SettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<any>({
@@ -12,6 +13,7 @@ export const SettingsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -34,12 +36,13 @@ export const SettingsPage: React.FC = () => {
     e.preventDefault();
     setSaving(true);
     setSuccess(false);
+    setError('');
     try {
       await api.put('/settings', settings);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menyimpan pengaturan aplikasi.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Gagal menyimpan pengaturan aplikasi.'));
     } finally {
       setSaving(false);
     }
@@ -66,6 +69,13 @@ export const SettingsPage: React.FC = () => {
         {success && (
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-xs font-semibold flex items-center gap-2">
             <Check className="w-4 h-4" /> Pengaturan berhasil disimpan dan langsung diterapkan ke perhitungan sistem.
+          </div>
+        )}
+
+        {error && (
+          <div role="alert" className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs font-semibold flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 

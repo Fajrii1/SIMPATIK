@@ -30,6 +30,7 @@ class WorkloadController extends Controller
         }
 
         $teamId = $request->query('team_id');
+        $teamId = ($teamId === null || $teamId === '') ? null : (int) $teamId;
 
         // Pengaturan hak akses PRD:
         // Admin & Pimpinan dapat melihat seluruh pegawai atau filter berdasarkan tim.
@@ -39,10 +40,10 @@ class WorkloadController extends Controller
 
         $userRole = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
         if ($userRole === 'pegawai') {
-            $ledTeams = $currentUser->ledTeams->pluck('id')->toArray();
+            $ledTeams = $currentUser->ledTeams->pluck('id')->map(fn ($id) => (int) $id)->all();
             if (! empty($ledTeams)) {
                 // User adalah ketua tim
-                if ($teamId && in_array($teamId, $ledTeams)) {
+                if ($teamId !== null && in_array($teamId, $ledTeams, true)) {
                     $query->whereHas('teams', function ($q) use ($teamId) {
                         $q->where('teams.id', $teamId);
                     });
@@ -55,7 +56,7 @@ class WorkloadController extends Controller
                 // Pegawai biasa hanya melihat bebannya sendiri
                 $query->where('id', $currentUser->id);
             }
-        } elseif ($teamId) {
+        } elseif ($teamId !== null) {
             $query->whereHas('teams', function ($q) use ($teamId) {
                 $q->where('teams.id', $teamId);
             });
@@ -122,8 +123,8 @@ class WorkloadController extends Controller
         // Hak akses: admin & pimpinan bebas; ketua tim hanya boleh akses anggota tim yang dipimpin; pegawai hanya boleh akses dirinya sendiri
         $userRole = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
         if ($userRole === 'pegawai') {
-            $ledTeams = $currentUser->ledTeams->pluck('id')->toArray();
-            $targetUserTeams = $targetUser->teams->pluck('id')->toArray();
+            $ledTeams = $currentUser->ledTeams->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $targetUserTeams = $targetUser->teams->pluck('id')->map(fn ($id) => (int) $id)->all();
             $isTeamMember = ! empty(array_intersect($ledTeams, $targetUserTeams));
 
             if ($currentUser->id !== $targetUser->id && ! $isTeamMember) {
@@ -226,34 +227,38 @@ class WorkloadController extends Controller
         }
 
         $teamId = $request->query('team_id');
+        $teamId = ($teamId === null || $teamId === '') ? null : (int) $teamId;
         $allWarnings = $this->workloadService->getMonthlyWarnings($month);
 
         // Filter berdasarkan hak akses
         $userRole = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
         if ($userRole === 'pegawai') {
-            $ledTeams = $currentUser->ledTeams->pluck('id')->toArray();
+            $ledTeams = $currentUser->ledTeams->pluck('id')->map(fn ($id) => (int) $id)->all();
             if (! empty($ledTeams)) {
                 // Filter hanya peringatan anggota tim yang dipimpin atau peringatan kantor umum
                 $allowedUserIds = User::whereHas('teams', function ($q) use ($ledTeams) {
                     $q->whereIn('teams.id', $ledTeams);
-                })->pluck('id')->toArray();
+                })->pluck('id')->map(fn ($id) => (int) $id)->all();
 
                 $allWarnings = array_values(array_filter($allWarnings, function ($w) use ($allowedUserIds) {
-                    return $w['pegawai_id'] === null || in_array($w['pegawai_id'], $allowedUserIds);
+                    return $w['pegawai_id'] === null
+                        || in_array((int) $w['pegawai_id'], $allowedUserIds, true);
                 }));
             } else {
                 // Pegawai biasa hanya melihat peringatan untuk dirinya
                 $allWarnings = array_values(array_filter($allWarnings, function ($w) use ($currentUser) {
-                    return $w['pegawai_id'] === $currentUser->id;
+                    return $w['pegawai_id'] !== null
+                        && (int) $w['pegawai_id'] === (int) $currentUser->id;
                 }));
             }
-        } elseif ($teamId) {
+        } elseif ($teamId !== null) {
             $allowedUserIds = User::whereHas('teams', function ($q) use ($teamId) {
                 $q->where('teams.id', $teamId);
-            })->pluck('id')->toArray();
+            })->pluck('id')->map(fn ($id) => (int) $id)->all();
 
             $allWarnings = array_values(array_filter($allWarnings, function ($w) use ($allowedUserIds) {
-                return $w['pegawai_id'] === null || in_array($w['pegawai_id'], $allowedUserIds);
+                return $w['pegawai_id'] === null
+                    || in_array((int) $w['pegawai_id'], $allowedUserIds, true);
             }));
         }
 

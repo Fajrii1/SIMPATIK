@@ -9,6 +9,7 @@ export const LoginPage: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const { login } = useAuth();
@@ -17,6 +18,7 @@ export const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setLoading(true);
 
     try {
@@ -117,7 +119,7 @@ export const LoginPage: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="********"
                   className={`w-full text-sm bg-white border rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 transition shadow-2xs pr-11 ${
                     error
                       ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500'
@@ -157,7 +159,7 @@ export const LoginPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => alert('Silakan hubungi administrator SIMPATIK BPS Kota Palembang untuk reset kata sandi akun Anda.')}
+                onClick={() => setNotice('Silakan hubungi administrator SIMPATIK BPS Kota Palembang untuk reset kata sandi akun Anda.')}
                 className="text-xs font-semibold text-slate-500 hover:text-[#164e9a] transition"
               >
                 Lupa kata sandi?
@@ -186,11 +188,21 @@ export const LoginPage: React.FC = () => {
             </div>
           </form>
 
+          {notice && (
+            <div
+              role="status"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800"
+            >
+              <AlertCircle className="mt-0.5 w-4 h-4 shrink-0" />
+              <span>{notice}</span>
+            </div>
+          )}
+
           {/* Hubungi Admin */}
           <div className="mt-8 text-center text-xs text-slate-500">
             Belum punya akun?{' '}
             <span
-              onClick={() => alert('Pendaftaran akun dikelola langsung oleh Bagian Umum / Admin Sistem BPS Kota Palembang.')}
+              onClick={() => setNotice('Pendaftaran akun dikelola langsung oleh Bagian Umum / Admin Sistem BPS Kota Palembang.')}
               className="font-bold text-slate-800 hover:text-[#164e9a] cursor-pointer transition underline underline-offset-2"
             >
               Hubungi admin aplikasi
@@ -201,7 +213,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer Kiri */}
         <div className="relative z-10 pt-4 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Aplikasi Penjadwalan Statistik • BPS Kota Palembang</span>
+          <span>Aplikasi Penjadwalan Statistik | BPS Kota Palembang</span>
           <span className="font-mono">v1.0.0</span>
         </div>
       </div>

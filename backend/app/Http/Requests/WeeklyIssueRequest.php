@@ -23,7 +23,10 @@ class WeeklyIssueRequest extends FormRequest
         // Cek izin pegawai mengisi kendala dari pengaturan sistem.
         // Bila diizinkan, pegawai tetap hanya boleh melaporkan kendala untuk tim
         // yang diikutinya (atau kegiatan milik tim tersebut) sesuai PRD Bagian 14.
-        $allowed = Setting::getVal('pegawai_boleh_isi_kendala', false);
+        $allowed = filter_var(
+            Setting::getVal('pegawai_boleh_isi_kendala', true),
+            FILTER_VALIDATE_BOOLEAN
+        );
         if ($allowed) {
             $teamId = (int) $this->input('team_id');
             $userTeamIds = $user->teams()->pluck('teams.id')->all();

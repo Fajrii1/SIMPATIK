@@ -83,13 +83,18 @@ export const MainLayout: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [profileOpen]);
 
+  const canViewReports =
+    user?.peran === "admin" || user?.peran === "pimpinan" || Boolean(user?.is_ketua);
+
   const mainNavItems = [
     { label: "Dashboard", path: "/", icon: LayoutDashboard },
     { label: "Kalender Kegiatan", path: "/calendar", icon: Calendar },
     { label: "Daftar Kegiatan", path: "/activities", icon: ClipboardList },
     { label: "Monitoring Beban Kerja", path: "/workload", icon: BarChart3 },
     { label: "Kendala Mingguan", path: "/issues", icon: AlertTriangle },
-    { label: "Laporan & Ekspor", path: "/reports", icon: FileSpreadsheet },
+    ...(canViewReports
+      ? [{ label: "Laporan & Ekspor", path: "/reports", icon: FileSpreadsheet }]
+      : []),
   ];
 
   const adminNavItems = [

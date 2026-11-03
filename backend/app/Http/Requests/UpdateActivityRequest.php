@@ -52,7 +52,7 @@ class UpdateActivityRequest extends FormRequest
             'team_id' => ['sometimes', 'required', 'integer', 'exists:teams,id'],
             'mulai' => ['sometimes', 'required', 'date'],
             'selesai' => ['sometimes', 'required', 'date'],
-            'bobot' => ['sometimes', 'required', 'numeric', 'min:0.01', 'max:99.99'],
+            'bobot' => ['sometimes', 'required', 'numeric', 'min:0.5', 'max:3.0'],
             'kegiatan_besar' => ['sometimes', 'boolean'],
             'keterangan' => ['nullable', 'string'],
         ];
@@ -115,8 +115,8 @@ class UpdateActivityRequest extends FormRequest
             'mulai.date' => 'Format tanggal mulai tidak valid.',
             'selesai.required' => 'Tanggal selesai kegiatan wajib diisi.',
             'selesai.date' => 'Format tanggal selesai tidak valid.',
-            'bobot.min' => 'Bobot kegiatan minimal 0.01.',
-            'bobot.max' => 'Bobot kegiatan maksimal 99.99.',
+            'bobot.min' => 'Bobot kegiatan minimal 0,50.',
+            'bobot.max' => 'Bobot kegiatan maksimal 3,00.',
         ];
     }
 }

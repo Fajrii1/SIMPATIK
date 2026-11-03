@@ -13,8 +13,10 @@ import {
   Eye,
   UserPlus,
   UserMinus,
+  AlertTriangle,
 } from 'lucide-react';
 import { User, Team } from '../types';
+import { getApiErrorMessage } from '../services/errors';
 
 export const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -22,6 +24,11 @@ export const UsersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'users' | 'teams'>('users');
+  const [pageError, setPageError] = useState('');
+  const [pageSuccess, setPageSuccess] = useState('');
+  const [userModalError, setUserModalError] = useState('');
+  const [teamModalError, setTeamModalError] = useState('');
+  const [memberError, setMemberError] = useState('');
 
   // User Modal State (Create & Edit)
   const [showUserModal, setShowUserModal] = useState(false);
@@ -81,6 +88,7 @@ export const UsersPage: React.FC = () => {
       peran: 'pegawai',
       password: 'password',
     });
+    setUserModalError('');
     setShowUserModal(true);
   };
 
@@ -95,12 +103,14 @@ export const UsersPage: React.FC = () => {
       peran: u.peran,
       password: '',
     });
+    setUserModalError('');
     setShowUserModal(true);
   };
 
   // Simpan User (Create/Update)
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setUserModalError('');
     try {
       if (editingUser) {
         await api.put(`/users/${editingUser.id}`, userFormData);
@@ -109,19 +119,20 @@ export const UsersPage: React.FC = () => {
       }
       setShowUserModal(false);
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menyimpan data pegawai.');
+    } catch (err: unknown) {
+      setUserModalError(getApiErrorMessage(err, 'Gagal menyimpan data pegawai.'));
     }
   };
 
   // Hapus User (Soft Delete)
   const handleDeleteUser = async (u: User) => {
     if (!confirm(`Hapus (soft delete) akun pegawai ${u.nama}?`)) return;
+    setPageError('');
     try {
       await api.delete(`/users/${u.id}`);
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menghapus data pegawai.');
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal menghapus data pegawai.'));
     }
   };
 
@@ -129,6 +140,7 @@ export const UsersPage: React.FC = () => {
   const handleOpenCreateTeam = () => {
     setEditingTeam(null);
     setTeamFormData({ nama: '', keterangan: '', ketua_id: '' });
+    setTeamModalError('');
     setShowTeamModal(true);
   };
 
@@ -140,12 +152,14 @@ export const UsersPage: React.FC = () => {
       keterangan: t.keterangan || '',
       ketua_id: t.ketua_id ? String(t.ketua_id) : '',
     });
+    setTeamModalError('');
     setShowTeamModal(true);
   };
 
   // Simpan Tim (Create/Update)
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTeamModalError('');
     try {
       const payload = {
         ...teamFormData,
@@ -160,25 +174,27 @@ export const UsersPage: React.FC = () => {
 
       setShowTeamModal(false);
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menyimpan tim kerja.');
+    } catch (err: unknown) {
+      setTeamModalError(getApiErrorMessage(err, 'Gagal menyimpan tim kerja.'));
     }
   };
 
   // Hapus Tim (Soft Delete)
   const handleDeleteTeam = async (t: Team) => {
     if (!confirm(`Hapus tim kerja "${t.nama}"?`)) return;
+    setPageError('');
     try {
       await api.delete(`/teams/${t.id}`);
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menghapus tim.');
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal menghapus tim.'));
     }
   };
 
   // Lihat Anggota Tim
   const handleOpenTeamMembers = async (t: Team) => {
     setViewingTeam(t);
+    setMemberError('');
     try {
       const res = await api.get(`/teams/${t.id}/members`);
       setTeamMembers(res.data.data || []);
@@ -190,6 +206,7 @@ export const UsersPage: React.FC = () => {
   // Tambah Anggota ke Tim
   const handleAddMemberToTeam = async () => {
     if (!viewingTeam || !selectedAddMemberId) return;
+    setMemberError('');
     try {
       await api.post(`/teams/${viewingTeam.id}/members`, {
         user_id: parseInt(selectedAddMemberId),
@@ -197,8 +214,8 @@ export const UsersPage: React.FC = () => {
       setSelectedAddMemberId('');
       handleOpenTeamMembers(viewingTeam);
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menambahkan anggota.');
+    } catch (err: unknown) {
+      setMemberError(getApiErrorMessage(err, 'Gagal menambahkan anggota.'));
     }
   };
 
@@ -206,31 +223,35 @@ export const UsersPage: React.FC = () => {
   const handleRemoveMemberFromTeam = async (userId: number) => {
     if (!viewingTeam) return;
     if (!confirm('Hapus anggota ini dari tim kerja?')) return;
+    setMemberError('');
     try {
       await api.delete(`/teams/${viewingTeam.id}/members/${userId}`);
       handleOpenTeamMembers(viewingTeam);
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal menghapus anggota.');
+    } catch (err: unknown) {
+      setMemberError(getApiErrorMessage(err, 'Gagal menghapus anggota.'));
     }
   };
 
   const handleToggleUserStatus = async (user: User) => {
+    setPageError('');
     try {
       await api.patch(`/users/${user.id}/status`, { aktif: !user.aktif });
       fetchData();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal mengubah status pegawai.');
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal mengubah status pegawai.'));
     }
   };
 
   const handleResetPassword = async (user: User) => {
     if (!confirm(`Reset kata sandi untuk ${user.nama} ke default 'password'?`)) return;
+    setPageError('');
+    setPageSuccess('');
     try {
       await api.patch(`/users/${user.id}/reset-password`);
-      alert('Kata sandi berhasil direset ke "password". Pegawai diwajibkan mengganti kata sandi saat login.');
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal mereset kata sandi.');
+      setPageSuccess('Kata sandi berhasil direset ke "password". Pegawai diwajibkan mengganti kata sandi saat login.');
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal mereset kata sandi.'));
     }
   };
 
@@ -261,6 +282,20 @@ export const UsersPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {pageError && (
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0" />
+          <span>{pageError}</span>
+        </div>
+      )}
+
+      {pageSuccess && (
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <CheckCircle className="mt-0.5 w-4 h-4 shrink-0" />
+          <span>{pageSuccess}</span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
@@ -409,7 +444,7 @@ export const UsersPage: React.FC = () => {
                           {u.aktif ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500">{u.email} • {u.jabatan} ({u.peran})</p>
+                      <p className="text-xs text-slate-500">{u.email} | {u.jabatan} ({u.peran})</p>
                       <div className="pt-2 border-t border-slate-100 flex justify-end gap-1">
                         <button
                           onClick={() => setViewingUser(u)}
@@ -553,6 +588,13 @@ export const UsersPage: React.FC = () => {
                 </div>
               </div>
 
+              {userModalError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{userModalError}</span>
+                </p>
+              )}
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -640,6 +682,13 @@ export const UsersPage: React.FC = () => {
                 />
               </div>
 
+              {teamModalError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{teamModalError}</span>
+                </p>
+              )}
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -688,6 +737,13 @@ export const UsersPage: React.FC = () => {
                 <UserPlus className="w-4 h-4 inline mr-1" /> Tambah
               </button>
             </div>
+
+            {memberError && (
+              <p role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                <span>{memberError}</span>
+              </p>
+            )}
 
             {/* List Anggota */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100 my-2">

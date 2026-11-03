@@ -10,6 +10,8 @@ export interface User {
   aktif: boolean;
   must_change_password: boolean;
   teams?: { id: number; nama: string }[];
+  is_ketua?: boolean;
+  led_team_ids?: number[];
 }
 
 export interface Activity {

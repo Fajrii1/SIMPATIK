@@ -20,8 +20,9 @@ import { ChangePasswordPage } from './pages/ChangePasswordPage';
 const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   adminOnly?: boolean;
+  reportsOnly?: boolean;
   allowPendingPassword?: boolean;
-}> = ({ children, adminOnly = false, allowPendingPassword = false }) => {
+}> = ({ children, adminOnly = false, reportsOnly = false, allowPendingPassword = false }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -42,6 +43,13 @@ const ProtectedRoute: React.FC<{
   }
 
   if (adminOnly && user.peran !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  const canViewReports =
+    user.peran === 'admin' || user.peran === 'pimpinan' || Boolean(user.is_ketua);
+
+  if (reportsOnly && !canViewReports) {
     return <Navigate to="/" replace />;
   }
 
@@ -76,7 +84,14 @@ export const App: React.FC = () => {
             <Route path="/activities" element={<ActivitiesPage />} />
             <Route path="/workload" element={<WorkloadPage />} />
             <Route path="/issues" element={<IssuesPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute reportsOnly>
+                  <ReportsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
 

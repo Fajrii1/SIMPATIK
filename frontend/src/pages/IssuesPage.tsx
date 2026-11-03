@@ -12,6 +12,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { WeeklyIssue, Team } from '../types';
+import { getApiErrorMessage } from '../services/errors';
 
 export const IssuesPage: React.FC = () => {
   const { user } = useAuth();
@@ -35,18 +36,20 @@ export const IssuesPage: React.FC = () => {
 
   const canReportIssue = useMemo(() => {
     if (user?.peran === 'admin') return true;
-    if (teams.some((team) => team.ketua_id === user?.id)) return true;
+    if (user?.is_ketua) return true;
     return allowPegawaiIssue && reportableTeams.length > 0;
-  }, [user, teams, allowPegawaiIssue, reportableTeams]);
+  }, [user, allowPegawaiIssue, reportableTeams]);
 
   const canManageIssue = (item: WeeklyIssue) =>
     user?.peran === 'admin' ||
-    teams.some((team) => team.id === item.team_id && team.ketua_id === user?.id) ||
+    Boolean(user?.led_team_ids?.includes(item.team_id)) ||
     item.pic_id === user?.id;
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [statusError, setStatusError] = useState('');
   const [formData, setFormData] = useState({
     team_id: '',
     minggu_mulai: '',
@@ -120,6 +123,7 @@ export const IssuesPage: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError('');
     setModalLoading(true);
     try {
       await api.post('/issues', {
@@ -135,8 +139,8 @@ export const IssuesPage: React.FC = () => {
         tenggat: '',
       });
       fetchIssues();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal melaporkan kendala mingguan.');
+    } catch (err: unknown) {
+      setCreateError(getApiErrorMessage(err, 'Gagal melaporkan kendala mingguan.'));
     } finally {
       setModalLoading(false);
     }
@@ -145,13 +149,14 @@ export const IssuesPage: React.FC = () => {
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeIssue) return;
+    setStatusError('');
     setModalLoading(true);
     try {
       await api.patch(`/issues/${activeIssue.id}/status`, statusFormData);
       setActiveIssue(null);
       fetchIssues();
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Gagal memperbarui status kendala.');
+    } catch (err: unknown) {
+      setStatusError(getApiErrorMessage(err, 'Gagal memperbarui status kendala.'));
     } finally {
       setModalLoading(false);
     }
@@ -168,7 +173,10 @@ export const IssuesPage: React.FC = () => {
         </div>
         {canReportIssue && (
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setCreateError('');
+              setShowModal(true);
+            }}
             className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-xs transition"
           >
             <Plus className="w-4 h-4" />
@@ -193,6 +201,7 @@ export const IssuesPage: React.FC = () => {
                 </div>
                 <button
                   onClick={() => {
+                    setStatusError('');
                     setActiveIssue(ci);
                     setStatusFormData({
                       status: ci.status,
@@ -296,6 +305,7 @@ export const IssuesPage: React.FC = () => {
                       {canManageIssue(item) ? (
                         <button
                           onClick={() => {
+                            setStatusError('');
                             setActiveIssue(item);
                             setStatusFormData({
                               status: item.status,
@@ -386,6 +396,13 @@ export const IssuesPage: React.FC = () => {
                 />
               </div>
 
+              {createError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{createError}</span>
+                </p>
+              )}
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -441,15 +458,25 @@ export const IssuesPage: React.FC = () => {
 
               {statusFormData.status === 'selesai' && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Catatan Penutupan</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Catatan Penutupan <span className="text-rose-500">*</span>
+                  </label>
                   <textarea
                     rows={2}
+                    required
                     placeholder="Keterangan hasil penyelesaian kendala..."
                     value={statusFormData.catatan_penutupan}
                     onChange={(e) => setStatusFormData({ ...statusFormData, catatan_penutupan: e.target.value })}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600"
                   />
                 </div>
+              )}
+
+              {statusError && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                  <span>{statusError}</span>
+                </p>
               )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
