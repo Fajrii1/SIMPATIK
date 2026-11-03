@@ -1,3 +1,5 @@
+> Catatan: nama tim dan akun pada dokumen ini mengacu pada seeder sebelum commit 6ee1b45. Nama tim kanonik sekarang: Umum, Sosial, Produksi, Distribusi, NWAS, IPDS. Lihat docs/CATATAN_KEPUTUSAN.md bagian 10.
+
 # Laporan Audit Akhir Implementasi Basis Data dan Kerangka Kerja Backend
 **Aplikasi Penjadwalan dan Monitoring Kegiatan Statistik — BPS Kota Palembang**  
 **Tanggal Audit:** 28 Oktober 2026  

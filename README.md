@@ -50,13 +50,14 @@ Frontend berjalan di `http://localhost:5173` dan mem-proxy `/api` ke backend `ht
 
 ## Akun Pengujian
 
-Seeder menyediakan akun demo (kata sandi `password`):
+Akun awal dari `db:seed` (kata sandi `password`):
 
 - `admin@contoh.test` — Admin
-- `pimpinan@contoh.test` — Pimpinan (jika tersedia di seeder)
-- akun ketua tim dan pegawai lain sesuai seeder
+- `kepala@contoh.test` — Pimpinan
 
-Periksa `database/seeders/UserSeeder.php` untuk daftar lengkap.
+Akun `ketua1@contoh.test` sampai `ketua5@contoh.test` dan `pegawai01@contoh.test` sampai `pegawai10@contoh.test` hanya tersedia setelah menjalankan `DemoDataSeeder`.
+
+Tim kanonik: Umum, Sosial, Produksi, Distribusi, NWAS, IPDS.
 
 ## Role dan Hak Akses (ringkas)
 
@@ -70,6 +71,8 @@ Periksa `database/seeders/UserSeeder.php` untuk daftar lengkap.
 | Laporan kendala | Ya | Timnya | Bila pengaturan mengizinkan (timnya) | Tidak |
 
 Hak akses dicek di backend; frontend hanya menyesuaikan tampilan.
+
+Catatan: "Ketua Tim" bukan peran tersendiri, melainkan pegawai atau pimpinan yang tercatat sebagai `teams.ketua_id`.
 
 ## Rumus Beban Kerja
 
@@ -100,7 +103,7 @@ frontend/
 ## Dokumentasi Lain
 
 - `PRD.md` — kebutuhan produk dan aturan implementasi.
-- `PANDUAN_INSTALASI_DAN_PENGGUNAAN.md` — panduan instalasi detail.
+- `docs/PANDUAN_INSTALASI_DAN_PENGGUNAAN.md` — panduan instalasi detail.
 - `docs/` (jika ada) — catatan keputusan dan laporan fase.
 
 ## Pengujian
@@ -109,11 +112,11 @@ Backend (gunakan database pengujian terpisah `jadwal_bps_test`):
 
 ```bash
 cd backend
-# buat DB jadwal_bps_test, lalu:
-php artisan migrate:fresh --seed
-php artisan db:seed --class=DemoDataSeeder
+# buat database kosong bernama jadwal_bps_test (misalnya lewat phpMyAdmin), lalu:
 php artisan test
 ```
+
+Test men-migrate dan men-seed database pengujian sendiri lewat `RefreshDatabase` dan `DemoDataSeeder`, sehingga tidak ada langkah migrate atau seed manual. Jangan menjalankan `migrate:fresh` tanpa memastikan `DB_DATABASE` adalah `jadwal_bps_test`.
 
 Frontend:
 
@@ -129,4 +132,3 @@ Verifikasi browser: buka `http://localhost:5173`, login, uji kalender (heatmap/t
 
 - `end` pada FullCalendar bersifat eksklusif; jangan mengubah aturan tanggal.
 - Jangan menjalankan `migrate:fresh`/`db:wipe` pada data yang sudah ada.
-- Semua perubahan belum di-commit; lihat `git status`.

@@ -88,7 +88,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => '2026-10-18 16:00:00',
             ],
 
-            // 4. Kendala Umum Tim (activity_id NULL) pada Tim IPDS
+            // 4. Kendala Umum Tim (activity_id NULL) pada IPDS
             [
                 'activity_id' => null,
                 'team_id' => $ipds->id,
@@ -104,7 +104,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => null,
             ],
 
-            // 5. Kendala Minggu Berjalan di Tim Neraca
+            // 5. Kendala Minggu Berjalan di NWAS
             [
                 'activity_id' => null,
                 'team_id' => $neraca->id,
@@ -120,7 +120,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => null,
             ],
 
-            // 6. Kendala Spasial MFD (Tim IPDS)
+            // 6. Kendala Spasial MFD (IPDS)
             [
                 'activity_id' => $actMfd->id,
                 'team_id' => $ipds->id,
@@ -136,7 +136,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => null,
             ],
 
-            // 7. Kendala Umum Tim Pelayanan Statistik
+            // 7. Kendala Umum Umum
             [
                 'activity_id' => null,
                 'team_id' => $pelayanan->id,
@@ -152,7 +152,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => null,
             ],
 
-            // 8. Kendala Selesai di Tim Sosial
+            // 8. Kendala Selesai di Sosial
             [
                 'activity_id' => $actSusenas->id,
                 'team_id' => $sosial->id,
@@ -168,7 +168,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => '2026-10-08 11:00:00',
             ],
 
-            // 9. Kendala Pengolahan Tim Produksi
+            // 9. Kendala Pengolahan Produksi
             [
                 'activity_id' => $actPertanian->id,
                 'team_id' => $produksi->id,
@@ -184,7 +184,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => null,
             ],
 
-            // 10. Kendala Diseminasi Tim IPDS
+            // 10. Kendala Diseminasi IPDS
             [
                 'activity_id' => null,
                 'team_id' => $ipds->id,
@@ -200,7 +200,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => '2026-10-19 14:00:00',
             ],
 
-            // 11. Kendala Tim Distribusi
+            // 11. Kendala Distribusi
             [
                 'activity_id' => $actHarga->id,
                 'team_id' => $distribusi->id,
@@ -216,7 +216,7 @@ class WeeklyIssueSeeder extends Seeder
                 'ditutup_pada' => null,
             ],
 
-            // 12. Kendala Tim Neraca
+            // 12. Kendala NWAS
             [
                 'activity_id' => null,
                 'team_id' => $neraca->id,

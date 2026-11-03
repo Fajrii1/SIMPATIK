@@ -1,3 +1,5 @@
+> Catatan: nama tim dan akun pada dokumen ini mengacu pada seeder sebelum commit 6ee1b45. Nama tim kanonik sekarang: Umum, Sosial, Produksi, Distribusi, NWAS, IPDS. Lihat docs/CATATAN_KEPUTUSAN.md bagian 10.
+
 # Desain Basis Data (Data Dictionary)
 **Aplikasi Penjadwalan dan Monitoring Kegiatan Statistik — BPS Kota Palembang**  
 **Basis Data:** MySQL / MariaDB (XAMPP) | **Nama Basis Data:** `jadwal_bps`  

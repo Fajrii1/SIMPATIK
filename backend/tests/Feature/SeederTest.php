@@ -20,8 +20,7 @@ class SeederTest extends TestCase
 
     public function test_database_seeder_minimal_runs_on_empty_database(): void
     {
-        // Uji seeder minimal pada database yang masih berisi data demo global:
-        // jalankan ulang seeder minimal dan pastikan akun/tim utama tersedia.
+        // Uji pada database kosong (seed dimatikan) lalu jalankan DatabaseSeeder.
         $this->seed(DatabaseSeeder::class);
 
         $this->assertDatabaseHas('users', ['email' => 'admin@contoh.test']);

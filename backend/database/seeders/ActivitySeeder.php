@@ -99,7 +99,7 @@ class ActivitySeeder extends Seeder
                 'selesai_pada' => null,
                 'keterangan' => 'Kasus uji status Belum mulai.',
             ],
-            // 7. Kegiatan Berjalan di Tim Neraca
+            // 7. Kegiatan Berjalan di NWAS
             [
                 'nama' => 'Penyusunan PDRB Triwulan III Menurut Lapangan Usaha',
                 'jenis' => 'Pengolahan Data',
@@ -112,7 +112,7 @@ class ActivitySeeder extends Seeder
                 'selesai_pada' => null,
                 'keterangan' => 'Pengolahan data rutin triwulanan.',
             ],
-            // 8. Kegiatan Berjalan di Tim Produksi
+            // 8. Kegiatan Berjalan di Produksi
             [
                 'nama' => 'Survei Industri Manufaktur Besar dan Sedang',
                 'jenis' => 'Survei',
@@ -125,7 +125,7 @@ class ActivitySeeder extends Seeder
                 'selesai_pada' => null,
                 'keterangan' => 'Pencacahan industri bulanan.',
             ],
-            // 9. Kegiatan Berjalan di Tim Distribusi
+            // 9. Kegiatan Berjalan di Distribusi
             [
                 'nama' => 'Survei Pariwisata dan Akomodasi Perhotelan',
                 'jenis' => 'Survei',
@@ -138,7 +138,7 @@ class ActivitySeeder extends Seeder
                 'selesai_pada' => null,
                 'keterangan' => 'Monitoring okupansi kamar hotel.',
             ],
-            // 10. Kegiatan Berjalan di Tim IPDS
+            // 10. Kegiatan Berjalan di IPDS
             [
                 'nama' => 'Pemutakhiran Master File Desa (MFD)',
                 'jenis' => 'Pengolahan Data',
@@ -151,7 +151,7 @@ class ActivitySeeder extends Seeder
                 'selesai_pada' => null,
                 'keterangan' => 'Validasi batas spasial wilayah administrasi.',
             ],
-            // 11. Kegiatan Berjalan di Tim Pelayanan Statistik
+            // 11. Kegiatan Berjalan di Umum
             [
                 'nama' => 'Pelayanan Konsultasi Statistik Terpadu (PST)',
                 'jenis' => 'Pembinaan',
