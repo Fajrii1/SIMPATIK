@@ -119,7 +119,7 @@ export const LoginPage: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="********"
+                  placeholder="••••••••"
                   className={`w-full text-sm bg-white border rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 transition shadow-2xs pr-11 ${
                     error
                       ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500'
@@ -213,7 +213,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer Kiri */}
         <div className="relative z-10 pt-4 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Aplikasi Penjadwalan Statistik | BPS Kota Palembang</span>
+          <span>Aplikasi Penjadwalan Statistik • BPS Kota Palembang</span>
           <span className="font-mono">v1.0.0</span>
         </div>
       </div>

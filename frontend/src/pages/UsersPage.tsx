@@ -444,7 +444,7 @@ export const UsersPage: React.FC = () => {
                           {u.aktif ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500">{u.email} | {u.jabatan} ({u.peran})</p>
+                      <p className="text-xs text-slate-500">{u.email} • {u.jabatan} ({u.peran})</p>
                       <div className="pt-2 border-t border-slate-100 flex justify-end gap-1">
                         <button
                           onClick={() => setViewingUser(u)}

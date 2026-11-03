@@ -489,7 +489,7 @@ export const ActivitiesPage: React.FC = () => {
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <h3 className="font-semibold text-slate-900 text-sm leading-snug">{act.nama}</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">{act.team?.nama} | {act.jenis}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{act.team?.nama} • {act.jenis}</p>
                     </div>
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
@@ -698,7 +698,7 @@ export const ActivitiesPage: React.FC = () => {
                   Penugasan Petugas: {selectedActivity.nama}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Tim: {selectedActivity.team?.nama} | Periode: {selectedActivity.mulai} s.d. {selectedActivity.selesai} | Bobot: {selectedActivity.bobot}
+                  Tim: {selectedActivity.team?.nama} • Periode: {selectedActivity.mulai} s.d. {selectedActivity.selesai} • Bobot: {selectedActivity.bobot}
                 </p>
               </div>
               <button
@@ -742,7 +742,7 @@ export const ActivitiesPage: React.FC = () => {
                     <div>
                       <p className="font-bold text-slate-900">{as.user?.nama}</p>
                       <p className="text-slate-500">
-                        Peran: <strong className="text-slate-700">{as.peran}</strong> | Volume: {as.volume} {as.satuan} | Poin Beban: <strong>{as.poin_beban} pt</strong>
+                        Peran: <strong className="text-slate-700">{as.peran}</strong> • Volume: {as.volume} {as.satuan} • Poin Beban: <strong>{as.poin_beban} pt</strong>
                       </p>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                         {as.effective_mulai} s.d. {as.effective_selesai}

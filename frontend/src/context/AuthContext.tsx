@@ -48,6 +48,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       await api.post('/logout');
+    } catch {
+      // tetap bersihkan sesi lokal bila permintaan logout gagal
     } finally {
       setUser(null);
       window.location.href = '/login';

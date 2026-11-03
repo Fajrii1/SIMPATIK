@@ -3,13 +3,38 @@ import api from '../services/api';
 import { Settings as SettingsIcon, Save, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { getApiErrorMessage } from '../services/errors';
 
+interface SettingsForm {
+  ambang_beban_bulanan: number;
+  maks_penugasan_bersamaan: number;
+  maks_kegiatan_besar_bersamaan: number;
+  pegawai_boleh_isi_kendala: boolean;
+}
+
+const DEFAULT_SETTINGS: SettingsForm = {
+  ambang_beban_bulanan: 100,
+  maks_penugasan_bersamaan: 3,
+  maks_kegiatan_besar_bersamaan: 3,
+  pegawai_boleh_isi_kendala: false,
+};
+
+const normalizeSettings = (raw: Record<string, unknown> = {}): SettingsForm => {
+  const readNumber = (key: string, fallback: number): number => {
+    const parsed = Number(raw[key]);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const flag = raw.pegawai_boleh_isi_kendala;
+
+  return {
+    ambang_beban_bulanan: readNumber('ambang_beban_bulanan', DEFAULT_SETTINGS.ambang_beban_bulanan),
+    maks_penugasan_bersamaan: readNumber('maks_penugasan_bersamaan', DEFAULT_SETTINGS.maks_penugasan_bersamaan),
+    maks_kegiatan_besar_bersamaan: readNumber('maks_kegiatan_besar_bersamaan', DEFAULT_SETTINGS.maks_kegiatan_besar_bersamaan),
+    pegawai_boleh_isi_kendala: flag === true || flag === 'true' || flag === 1 || flag === '1',
+  };
+};
+
 export const SettingsPage: React.FC = () => {
-  const [settings, setSettings] = useState<any>({
-    ambang_beban_bulanan: 100,
-    maks_penugasan_bersamaan: 3,
-    maks_kegiatan_besar_bersamaan: 3,
-    pegawai_boleh_isi_kendala: false,
-  });
+  const [settings, setSettings] = useState<SettingsForm>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -19,9 +44,8 @@ export const SettingsPage: React.FC = () => {
     const fetchSettings = async () => {
       try {
         const res = await api.get('/settings');
-        // Backend returns settings
-        if (res.data.data) {
-          setSettings(res.data.data);
+        if (res.data.settings && typeof res.data.settings === 'object') {
+          setSettings(normalizeSettings(res.data.settings as Record<string, unknown>));
         }
       } catch (err) {
         console.error(err);
@@ -38,7 +62,17 @@ export const SettingsPage: React.FC = () => {
     setSuccess(false);
     setError('');
     try {
-      await api.put('/settings', settings);
+      const payload = {
+        ambang_beban_bulanan: settings.ambang_beban_bulanan,
+        maks_penugasan_bersamaan: settings.maks_penugasan_bersamaan,
+        maks_kegiatan_besar_bersamaan: settings.maks_kegiatan_besar_bersamaan,
+        pegawai_boleh_isi_kendala: settings.pegawai_boleh_isi_kendala,
+      };
+
+      const res = await api.put('/settings', payload);
+      if (res.data.settings && typeof res.data.settings === 'object') {
+        setSettings(normalizeSettings(res.data.settings as Record<string, unknown>));
+      }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {

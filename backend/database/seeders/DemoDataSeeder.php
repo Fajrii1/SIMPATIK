@@ -34,7 +34,7 @@ class DemoDataSeeder extends Seeder
         ];
 
         foreach ($ketuaData as $i => $data) {
-            User::updateOrCreate(
+            User::firstOrCreate(
                 ['email' => "ketua{$i}@contoh.test"],
                 [
                     'nama' => $data['nama'],
@@ -51,7 +51,7 @@ class DemoDataSeeder extends Seeder
         // 2. Akun pegawai
         for ($i = 1; $i <= 10; $i++) {
             $formattedIndex = str_pad((string) $i, 2, '0', STR_PAD_LEFT);
-            User::updateOrCreate(
+            User::firstOrCreate(
                 ['email' => "pegawai{$formattedIndex}@contoh.test"],
                 [
                     'nama' => "Pegawai {$formattedIndex}",

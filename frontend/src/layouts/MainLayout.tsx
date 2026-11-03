@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Calendar,
@@ -15,17 +15,28 @@ import {
   FileSpreadsheet,
   Menu,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
   User as UserIcon,
 } from "lucide-react";
 import api from "../services/api";
 
+const SIDEBAR_COLLAPSED_KEY = "simpatik.sidebar.collapsed";
+
+const readSidebarCollapsed = (): boolean => {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
 export const MainLayout: React.FC = () => {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   const [profileOpen, setProfileOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -107,11 +118,24 @@ export const MainLayout: React.FC = () => {
     setDrawerOpen(false);
   };
 
+  const toggleCollapsed = () => {
+    setCollapsed((value) => {
+      const next = !value;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // localStorage tidak tersedia; status tetap berlaku selama sesi ini.
+      }
+      return next;
+    });
+  };
+
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
       await logout();
-      navigate("/login", { replace: true });
+    } catch {
+      // AuthContext tetap membersihkan sesi lokal bila permintaan logout gagal.
     } finally {
       setLoggingOut(false);
       setConfirmLogout(false);
@@ -162,7 +186,7 @@ export const MainLayout: React.FC = () => {
       {/* Brand Header */}
       <div
         className={`border-b border-white/10 flex items-center ${
-          compact ? "justify-center p-3" : "justify-between p-4 sm:p-5 gap-3"
+          compact ? "flex-col justify-center gap-1 p-2" : "justify-between p-4 sm:p-5 gap-3"
         }`}
       >
         <div className={`flex items-center ${compact ? "justify-center" : "gap-3"}`}>
@@ -182,18 +206,27 @@ export const MainLayout: React.FC = () => {
             </div>
           )}
         </div>
-        {/* Close drawer button for mobile */}
-        <button
-          onClick={() => setDrawerOpen(false)}
-          aria-label="Tutup menu sidebar"
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
-        >
-          <X className="w-5 h-5" />
-        </button>
-        {/* Tidak menggunakan tombol panah; sidebar diperkecil dengan mengklik area sidebar. */}
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={compact ? "Perluas sidebar" : "Perkecil sidebar"}
+            aria-expanded={!compact}
+            title={compact ? "Perluas sidebar" : "Perkecil sidebar"}
+            className="hidden lg:flex items-center justify-center rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white transition-colors min-h-[44px] min-w-[44px]"
+          >
+            {compact ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+          </button>
+          {/* Close drawer button for mobile */}
+          <button
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Tutup menu sidebar"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
-
-      {/* Sidebar yang diperkecil dapat diperbesar dengan mengklik areanya. */}
 
       {/* Navigation Items */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto no-scrollbar">
@@ -236,12 +269,9 @@ export const MainLayout: React.FC = () => {
 
       {/* Sidebar: Drawer on mobile, collapsible on desktop */}
       <aside
-        onClick={() => {
-          if (!drawerOpen) setCollapsed((value) => !value);
-        }}
         className={`fixed lg:static top-0 bottom-0 left-0 z-50 ${sidebarWidth} bg-bps text-slate-100 flex flex-col border-r border-white/10 transform transition-all duration-300 ease-in-out ${
           drawerOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        } ${collapsed && !drawerOpen ? "cursor-pointer" : ""}`}
+        }`}
       >
         {sidebarContent(drawerOpen ? false : collapsed)}
       </aside>

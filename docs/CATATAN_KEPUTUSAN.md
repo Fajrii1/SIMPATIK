@@ -152,7 +152,7 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
   - `DatabaseSeeder` minimal: `SettingSeeder`, `UserSeeder`, `TeamSeeder`.
   - `DemoDataSeeder` opsional berisi akun ketua/pegawai, ketua dan anggota tim, kegiatan, penugasan, kendala, notifikasi, audit log.
   - Test memakai `RefreshDatabase` pada `jadwal_bps_test` dan seeder demo dipanggil lewat `$seed`/`$seeder` di TestCase.
-  - `DemoDataSeeder` idempoten (updateOrCreate/syncWithoutDetaching).
+  - `DemoDataSeeder` idempoten (firstOrCreate/syncWithoutDetaching).
   - Test berjalan di database `jadwal_bps_test` yang dipaksa oleh phpunit.xml, sedangkan perintah artisan manual selalu memakai `.env` sehingga harus memperhatikan `DB_DATABASE`.
 - **Alasan:** Menjaga database development tetap bersih, test reproducible dari database kosong, dan tidak mengubah PRD.
 
@@ -169,4 +169,15 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
   5. **Hak Akses Beban Kerja:** Ketua tim hanya dapat melihat ringkasan dan rincian beban kerja anggota tim yang dipimpinnya. Perbandingan ID tim dan pengguna dilakukan secara ketat (`in_array(..., true)` dengan konversi `(int)`) agar tipe data yang berbeda tidak lolos pemeriksaan.
   6. **Menu Laporan:** Rute dan menu Laporan & Ekspor hanya ditampilkan untuk admin, pimpinan, dan pengguna yang menjabat ketua tim. Backend tetap menegakkan aturan ekspor yang sama.
   7. **Penanda Ketua pada Profil:** Endpoint login, `/api/me`, dan respons pengguna menyertakan `is_ketua` serta `led_team_ids` bila relasi `ledTeams` dimuat, sehingga frontend tidak perlu menebak status ketua dari daftar tim.
+  8. **Beban Kerja Ketua Tim:** Ketua tim hanya melihat beban kerja anggota tim yang dipimpinnya. Ini menyimpang dari PRD bagian 5 yang memberi ketua tim akses ke total beban seluruh pegawai, dan disengaja agar pembatasan akses sesuai kebutuhan operasional tim.
+  9. **Penugasan Bersamaan:** Peringatan penugasan bersamaan dihitung dari puncak tumpang tindih harian, bukan jumlah penugasan yang beririsan dengan bulan. Ini menyimpang dari PRD bagian 8.2 dan disengaja untuk menghindari peringatan palsu pada penugasan yang tidak benar-benar bertumpuk pada hari yang sama.
+  10. **Keputusan Pemilik yang Akan Diterapkan pada Fase Berikutnya:**
+      1. Pelapor kendala adalah anggota tim dan ketua tim; pimpinan hanya boleh melapor bila juga anggota atau ketua tim.
+      2. Ketua tim hanya melihat beban kerja anggota timnya.
+      3. Bobot kegiatan dibatasi 0,50 sampai 3,00.
+      4. Penugasan bersamaan memakai puncak tumpang tindih harian.
+      5. Penanggung Jawab wajib diisi pada form kegiatan.
+      6. Volume penugasan dibatasi sesuai peran: admin dan pimpinan melihat semua, ketua tim melihat penugasan di kegiatan timnya, pegawai hanya melihat volume miliknya, dan rekan lain hanya melihat nama serta peran.
+      7. Periode penugasan harus berada dalam periode kegiatan.
+      8. Pimpinan hanya satu akun, yaitu kepala BPS, dan bersifat murni pemantau.
 - **Alasan:** Menutup celah otorisasi dan validasi tanpa mengubah PRD, warna, atau dependensi, serta menjaga data pengaturan yang sudah ada.

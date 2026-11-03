@@ -28,11 +28,10 @@ class TeamSeeder extends Seeder
             $team = Team::whereIn('nama', $data['aliases'])->first();
 
             if ($team) {
-                $team->update([
-                    'nama' => $data['nama'],
-                    'ketua_id' => null,
-                    'aktif' => true,
-                ]);
+                // Hanya sesuaikan nama kanonik; ketua, status aktif, dan anggota tidak disentuh.
+                if ($team->nama !== $data['nama']) {
+                    $team->update(['nama' => $data['nama']]);
+                }
             } else {
                 Team::create([
                     'nama' => $data['nama'],

@@ -219,6 +219,37 @@ class TeamManagementTest extends TestCase
         }
     }
 
+    public function test_designated_ketua_becomes_member_on_store_and_update(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $ketuaStore = User::where('email', 'ketua1@contoh.test')->first();
+        $ketuaUpdate = User::where('email', 'ketua2@contoh.test')->first();
+
+        Sanctum::actingAs($admin);
+
+        $createResponse = $this->postJson('/api/teams', [
+            'nama' => 'Tim Uji Ketua Otomatis',
+            'ketua_id' => $ketuaStore->id,
+        ]);
+
+        $createResponse->assertStatus(201);
+        $teamId = $createResponse->json('data.id');
+        $team = Team::findOrFail($teamId);
+
+        try {
+            $this->assertTrue($team->members()->where('user_id', $ketuaStore->id)->exists());
+
+            $this->putJson("/api/teams/{$team->id}", [
+                'ketua_id' => $ketuaUpdate->id,
+            ])->assertStatus(200);
+
+            $this->assertTrue($team->members()->where('user_id', $ketuaUpdate->id)->exists());
+        } finally {
+            $team->members()->detach();
+            $team->forceDelete();
+        }
+    }
+
     /**
      * Uji admin dapat menambahkan anggota ke tim dan mencegah duplikasi.
      */

@@ -40,7 +40,7 @@ const EVENT_TOOLTIP = (event: CalendarEvent) => {
   const team = event.extendedProps.team_nama || 'Tanpa tim';
   const status = event.extendedProps.status || 'Tanpa status';
   const range = formatDateRange(event.start, getEventInclusiveEnd(event));
-  return `${event.title}\n${team} | ${status}\n${range}`;
+  return `${event.title}\n${team} • ${status}\n${range}`;
 };
 
 export const MonthlyCalendarTab: React.FC<MonthlyCalendarTabProps> = ({
