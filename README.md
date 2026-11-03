@@ -59,6 +59,17 @@ Akun `ketua1@contoh.test` sampai `ketua5@contoh.test` dan `pegawai01@contoh.test
 
 Tim kanonik: Umum, Sosial, Produksi, Distribusi, NWAS, IPDS.
 
+## Variabel Seeder (`.env.example`)
+
+Variabel berikut wajib diisi bila menjalankan seeder di lingkungan production:
+
+| Variabel | Keterangan |
+|---|---|
+| `SEED_ADMIN_PASSWORD` | Kata sandi akun admin awal (`admin@contoh.test`). Kosong akan menyebabkan exception saat seber di production. |
+| `SEED_KEPALA_PASSWORD` | Kata sandi akun pimpinan awal (`kepala@contoh.test`). Kosong akan menyebabkan exception saat seber di production. |
+
+Di luar production, akun baru dibuat dengan kata sandi pengembangan `password` dan `must_change_password=false`.
+
 ## Role dan Hak Akses (ringkas)
 
 | Fitur | Admin | Ketua Tim | Pegawai | Pimpinan |

@@ -224,3 +224,21 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
   6. **Kalender Baca Saja:** Tombol tambah dan editor kegiatan di kalender dihapus. Tambah/ubah/hapus dilakukan dari Daftar Kegiatan (`/activities`). Kalender menyediakan tautan "Buka di Daftar Kegiatan" menuju `/activities?id={id}` yang membuka detail kegiatan.
   7. **Periode Penugasan Tersembunyi:** Periode per penugasan disembunyikan di balik opsi "Atur periode khusus (opsional)"; default mengikuti tanggal kegiatan.
 - **Alasan:** Mengurangi duplikasi form, menegakkan peran PJ secara eksplisit, menutup kebocoran volume, dan membuat kalender murni untuk pemantauan.
+
+---
+
+## 15. Daftar Penyimpangan Terhadap PRD yang Sengaja (untuk disesuaikan di PRD)
+
+Berikut daftar penyimpangan disengaja dari `PRD.md` yang telah diterapkan dalam implementasi. Pihak proyek dapat menyesuaikan `PRD.md` agar sesuai dengan perilaku sistem yang ada.
+
+| No | Area | Isi PRD (asli) | Perilaku yang Diterapkan | Alasan |
+|---|---|---|---|---|
+| 1 | Ketua tim beban kerja | Ketua tim perlu melihat total beban seorang pegawai (angka dan warna) saat menugaskan, walau pegawai itu juga bertugas di tim lain. Rincian penugasan lintas tim hanya menampilkan nama kegiatan dan periode. | Sama dengan PRD (tidak penyimpangan, hanya dikonfirmasi). | Keputusan pemilik nomor 2. |
+| 2 | Peringatan penugasan bersamaan | PRD 8.2 menyebut jumlah penugasan pegawai yang periodenya beririsan dengan bulan mencapai `maks_penugasan_bersamaan` atau lebih. | Puncak tumpang tindih harian (tiga penugasan yang tumpang tindih pada satu hari memicu peringatan, tiga penugasan berurutan dalam satu bulan tidak). | Keputusan pemilik nomor 4: menghindari peringatan palsu. |
+| 3 | Pimpinan | Pimpinan adalah pemantau murni, tidak dapat membuat/mengubah kegiatan, penugasan, atau kendala. | Sama dengan PRD (tidak penyimpangan, hanya dikonfirmasi). | Keputusan pemilik nomor 8. |
+| 4 | Volume penugasan | Tidak disebut secara eksplisit di PRD tentang pembatasan visibilitas volume per peran. | Admin dan pimpinan melihat semua; ketua tim melihat penugasan di kegiatan timnya; pegawai hanya melihat metrik miliknya; lainnya hanya nama dan peran. | Keputusan pemilik nomor 6. |
+| 5 | Form kegiatan | Form kegiatan dapat diakses dari kalender. | Form kegiatan hanya di Daftar Kegiatan (`/activities`). Kalender baca-saja dengan tautan ke Daftar Kegiatan. | Mengurangi duplikasi form. |
+| 6 | Penanggung Jawab | Tidak secara eksplisit mewajibkan Penanggung Jawab pada setiap kegiatan. | Setiap kegiatan wajib memiliki tepat satu penugasan dengan peran "Penanggung Jawab". | Menegakkan kepemilikan kegiatan. |
+| 7 | Palet dan identitas visual | Tidak disebut secara eksplisit di PRD. | Warna gelap dasar memakai token `bps` (#002b6a) dan warna aksi tetap sky. Tidak ada slate gelap atau navy lain untuk latar. | Persetujuan pemilik proyek (PRD bagian 11). |
+| 8 | Tenggat kendala vs minggu mulai | PRD 8.5 tidak secara eksplisit melarang tenggat sebelum minggu mulai. | Tenggat tidak dipaksa berada sesudah minggu mulai (karena konsep jatuh tempo). | PRD mengandalkan konsep jatuh tempo, bukan keterkaitan tanggal. |
+| 9 | Notifikasi kegiatan besar bersamaan | Peringatan tingkat kantor (kegiatan besar bersamaan) tidak disebutkan penerimanya di PRD. | Tidak memicu notifikasi `peringatan_jadwal` untuk kegiatan besar bersamaan. | Tidak ada pegawai sebagai subjek notifikasi. |
