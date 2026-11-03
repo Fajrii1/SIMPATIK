@@ -61,7 +61,7 @@ export interface Team {
 export interface WeeklyIssue {
   id: number;
   activity_id?: number;
-  activity?: { id: number; nama: string };
+  kegiatan?: { id: number; nama: string };
   team_id: number;
   team?: { id: number; nama: string };
   pelapor_id: number;
@@ -76,7 +76,19 @@ export interface WeeklyIssue {
   status: 'terbuka' | 'diproses' | 'selesai';
   is_overdue: boolean;
   catatan_penutupan?: string;
+  ditutup_pada?: string | null;
   created_at: string;
+  history?: WeeklyIssueHistory[];
+}
+
+export interface WeeklyIssueHistory {
+  id: number;
+  waktu: string;
+  aktor: string;
+  aksi: string;
+  status_lama: string | null;
+  status_baru: string | null;
+  catatan?: string | null;
 }
 
 export interface NotificationItem {

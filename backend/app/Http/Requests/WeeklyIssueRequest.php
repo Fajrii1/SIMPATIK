@@ -4,6 +4,9 @@ namespace App\Http\Requests;
 
 use App\Models\Activity;
 use App\Models\Setting;
+use App\Models\User;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 class WeeklyIssueRequest extends FormRequest
@@ -55,6 +58,9 @@ class WeeklyIssueRequest extends FormRequest
         return $user->ledTeams()->exists();
     }
 
+    /**
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
     public function rules(): array
     {
         return [
@@ -66,6 +72,72 @@ class WeeklyIssueRequest extends FormRequest
             'tindak_lanjut' => ['nullable', 'string', 'max:2000'],
             'pic_id' => ['nullable', 'exists:users,id'],
             'tenggat' => ['nullable', 'date'],
+        ];
+    }
+
+    /**
+     * Aturan lintas isian: kegiatan harus milik tim yang dipilih dan PIC harus
+     * pengguna aktif yang menjadi anggota tim yang dipilih.
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function ($validator) {
+            $teamId = (int) $this->input('team_id');
+
+            if ($teamId <= 0) {
+                return;
+            }
+
+            if ($this->filled('activity_id')) {
+                $activity = Activity::find((int) $this->input('activity_id'));
+
+                if ($activity && (int) $activity->team_id !== $teamId) {
+                    $validator->errors()->add(
+                        'activity_id',
+                        'Kegiatan yang dipilih bukan milik tim yang dipilih.'
+                    );
+                }
+            }
+
+            if ($this->filled('pic_id')) {
+                $picActiveMember = User::query()
+                    ->whereKey((int) $this->input('pic_id'))
+                    ->where('aktif', true)
+                    ->whereHas('teams', function ($query) use ($teamId) {
+                        $query->where('teams.id', $teamId);
+                    })
+                    ->exists();
+
+                if (! $picActiveMember) {
+                    $validator->errors()->add(
+                        'pic_id',
+                        'PIC harus merupakan pengguna aktif yang menjadi anggota tim yang dipilih.'
+                    );
+                }
+            }
+        });
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'team_id.required' => 'Tim terkait wajib dipilih.',
+            'team_id.exists' => 'Tim yang dipilih tidak ditemukan.',
+            'minggu_mulai.required' => 'Minggu mulai kendala wajib diisi.',
+            'minggu_mulai.date' => 'Minggu mulai kendala harus berupa tanggal yang valid.',
+            'kendala.required' => 'Uraian kendala wajib diisi.',
+            'kendala.string' => 'Uraian kendala harus berupa teks.',
+            'kendala.max' => 'Uraian kendala maksimal 2000 karakter.',
+            'solusi.string' => 'Usulan solusi harus berupa teks.',
+            'solusi.max' => 'Usulan solusi maksimal 2000 karakter.',
+            'tindak_lanjut.string' => 'Tindak lanjut harus berupa teks.',
+            'tindak_lanjut.max' => 'Tindak lanjut maksimal 2000 karakter.',
+            'activity_id.exists' => 'Kegiatan yang dipilih tidak ditemukan.',
+            'pic_id.exists' => 'PIC yang dipilih tidak ditemukan.',
+            'tenggat.date' => 'Tenggat harus berupa tanggal yang valid.',
         ];
     }
 }

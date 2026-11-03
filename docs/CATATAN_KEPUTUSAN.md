@@ -194,3 +194,18 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
   4. **Audit Mutasi Baru:** `AuditLogger` mencatat mutasi pengguna (buat, ubah, reset sandi, aktif/nonaktif, hapus), tim (buat, ubah, ubah ketua, ubah anggota, tambah anggota, hapus anggota, hapus tim), dan pengaturan (nilai lama dan baru per kunci yang benar-benar berubah). Snapshot audit tidak memuat kata sandi, hash, remember token, atau token lain.
   5. **Ketua Tim Dikosongkan:** Menghapus anggota yang menjabat ketua tim atau menghapus akun yang menjadi ketua tim tetap mengosongkan `ketua_id`. Perubahan itu kini diaudit dan respons memuat pesan "Ketua tim dikosongkan.".
 - **Alasan:** Memutus akses akun nonaktif, menghilangkan sandi default yang mudah ditebak, menjaga jejak audit mutasi penting, dan mempertahankan perilaku pengosongan ketua yang sudah ada tanpa mengubah PRD atau dependensi.
+
+---
+
+## 13. Kendala Selesai Terkunci, Riwayat Detail, dan Notifikasi Status (Fase 4)
+
+- **Konteks:** Halaman kendala mingguan belum memiliki modal detail baca saja, riwayat status hanya ada mentah di audit log, kendala selesai masih bisa dibuka kembali oleh PIC, kegiatan dan PIC tidak dibatasi terhadap tim yang dipilih, dan notifikasi perubahan status belum mencakup pelapor serta ketua tim secara konsisten.
+- **Keputusan:**
+  1. **Kendala Selesai Terkunci:** Isi kendala dan statusnya hanya dapat diubah oleh admin atau ketua tim terkait. PIC tidak dapat membuka kembali kendala yang sudah selesai. Backend menolak dengan HTTP 422 dan pesan yang jelas; frontend menonaktifkan kontrol status dan penyimpanan ketika kendala selesai dan pengguna bukan admin/ketua.
+  2. **Kegiatan Harus Satu Tim:** `activity_id` pada kendala harus merupakan kegiatan milik `team_id` yang sama. Pelanggaran ditolak 422 dengan pesan dalam bahasa Indonesia.
+  3. **PIC Aktif dan Anggota Tim:** `pic_id` harus pengguna berstatus aktif yang tercatat sebagai anggota `team_id`. Pelanggaran ditolak 422 dengan pesan dalam bahasa Indonesia.
+  4. **Tenggat Tidak Dibatasi oleh Minggu Mulai:** PRD 8.5 mengandalkan konsep jatuh tempo untuk kendala yang lewat tenggat dan tidak melarang tenggat sebelum `minggu_mulai`. Karena itu tenggat tidak dipaksa berada sesudah minggu mulai.
+  5. **Riwayat Status dari Audit Log:** `GET /api/issues/{id}` mengembalikan semua field kendala plus `history` yang disusun dari `audit_logs` (waktu, aktor, aksi, status lama, status baru, catatan). Tidak ada tabel atau kolom baru yang ditambahkan; riwayat tetap berasal dari mutasi yang sudah dicatat.
+  6. **Notifikasi Perubahan Status:** Notifikasi dikirim ke pelapor, PIC, dan ketua tim, tanpa duplikat dan tanpa aktor, dengan tautan `/issues?id={id}` serta status baru dan catatan maksimal 120 karakter. Notifikasi kendala baru dan penunjukan PIC tetap memakai pola yang sama.
+  7. **Halaman Detail via Query:** `IssuesPage` membuka modal detail bila parameter `id` ada di URL. Kendala yang tidak ditemukan atau di luar wewenang menampilkan pesan yang wajar, bukan layar kosong atau error mentah.
+- **Alasan:** Menutup celah buka kembali kendala oleh PIC, menjaga integritas kegiatan dan PIC terhadap tim, memberi riwayat status yang dapat dibaca, dan memastikan notifikasi status sampai ke seluruh pihak yang terlibat tanpa kebisingan.
