@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\AssignmentVisibility;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,7 +16,8 @@ class AssignmentResource extends JsonResource
     public function toArray(Request $request): array
     {
         $bobot = (float) ($this->activity?->bobot ?? 1.00);
-        $totalPoin = round(((float) $this->volume) * $bobot, 2);
+        $canViewMetrics = AssignmentVisibility::canViewMetrics($request->user(), $this->resource);
+        $totalPoin = $canViewMetrics ? round(((float) $this->volume) * $bobot, 2) : null;
 
         return [
             'id' => $this->id,
@@ -24,13 +26,14 @@ class AssignmentResource extends JsonResource
             'user_id' => $this->user_id,
             'user' => new UserResource($this->whenLoaded('user')),
             'peran' => $this->peran,
-            'volume' => (float) $this->volume,
-            'satuan' => $this->satuan,
+            'volume' => $canViewMetrics ? (float) $this->volume : null,
+            'satuan' => $canViewMetrics ? $this->satuan : null,
             'mulai' => $this->mulai?->format('Y-m-d'),
             'selesai' => $this->selesai?->format('Y-m-d'),
             'effective_mulai' => $this->getEffectiveMulai()?->format('Y-m-d'),
             'effective_selesai' => $this->getEffectiveSelesai()?->format('Y-m-d'),
             'poin_total' => $totalPoin,
+            'metrics_visible' => $canViewMetrics,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

@@ -101,6 +101,14 @@ class ActivityManagementTest extends TestCase
             'bobot' => 1.25,
             'kegiatan_besar' => true,
             'keterangan' => 'Keterangan uji kegiatan admin',
+            'assignments' => [
+                [
+                    'user_id' => $admin->id,
+                    'peran' => 'Penanggung Jawab',
+                    'volume' => 12,
+                    'satuan' => 'Dokumen',
+                ],
+            ],
         ]);
 
         $response->assertStatus(201)
@@ -140,7 +148,7 @@ class ActivityManagementTest extends TestCase
             'assignments' => [
                 [
                     'user_id' => $users[0]->id,
-                    'peran' => 'PIC',
+                    'peran' => 'Penanggung Jawab',
                     'volume' => 5,
                     'satuan' => 'Dokumen',
                     'mulai' => '2026-11-02',
@@ -159,14 +167,14 @@ class ActivityManagementTest extends TestCase
 
         $response->assertStatus(201)
             ->assertJsonCount(2, 'data.assignments')
-            ->assertJsonPath('data.assignments.0.peran', 'PIC');
+            ->assertJsonPath('data.assignments.0.peran', 'Penanggung Jawab');
 
         $activityId = (int) $response->json('data.id');
 
         $this->assertDatabaseHas('assignments', [
             'activity_id' => $activityId,
             'user_id' => $users[0]->id,
-            'peran' => 'PIC',
+            'peran' => 'Penanggung Jawab',
             'satuan' => 'Dokumen',
         ]);
         $this->assertDatabaseHas('notifications', [
@@ -202,7 +210,7 @@ class ActivityManagementTest extends TestCase
             'assignments' => [
                 [
                     'user_id' => $user->id,
-                    'peran' => 'PIC',
+                    'peran' => 'Penanggung Jawab',
                     'volume' => 1,
                     'satuan' => 'Hari',
                     'mulai' => '2026-11-01',
@@ -247,6 +255,14 @@ class ActivityManagementTest extends TestCase
                 'team_id' => $ledTeam->id,
                 'mulai' => '2026-11-01',
                 'selesai' => '2026-11-10',
+                'assignments' => [
+                    [
+                        'user_id' => $tempKetua->id,
+                        'peran' => 'Penanggung Jawab',
+                        'volume' => 4,
+                        'satuan' => 'Dokumen',
+                    ],
+                ],
             ]);
             $response->assertStatus(201);
             $activityId = $response->json('data.id');
@@ -425,7 +441,8 @@ class ActivityManagementTest extends TestCase
         $admin = User::where('email', 'admin@contoh.test')->first();
         $team = Team::first();
         $this->assertNotNull($admin);
-        $this->assertNotNull($team);
+        $activeUser = User::where('aktif', true)->first();
+        $this->assertNotNull($activeUser);
 
         Sanctum::actingAs($admin);
 
@@ -435,6 +452,14 @@ class ActivityManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-10',
+            'assignments' => [
+                [
+                    'user_id' => $activeUser->id,
+                    'peran' => 'Penanggung Jawab',
+                    'volume' => 5,
+                    'satuan' => 'Hari',
+                ],
+            ],
         ];
 
         $this->postJson('/api/activities', $basePayload + ['bobot' => 0.49])

@@ -431,7 +431,7 @@ class ScheduledIssuesAndExportTest extends TestCase
             'assignments' => [
                 [
                     'user_id' => $this->pegawaiA->id,
-                    'peran' => 'Pencacah',
+                    'peran' => 'Penanggung Jawab',
                     'volume' => 50,
                     'satuan' => SatuanPenugasan::RESPONDEN->value,
                 ],

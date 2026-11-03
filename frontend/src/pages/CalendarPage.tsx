@@ -2,19 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   CalendarDays,
-  CheckCircle2,
   LayoutGrid,
   List,
-  Plus,
   Search,
   Users,
-  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import type { Team, User } from '../types';
 import { ActivityDetailModal } from './CalendarActivityDetailModal';
-import { AddActivityModal } from './CalendarAddActivityModal';
 import { EmployeeTab } from './CalendarEmployeeTab';
 import { HeatmapTab } from './CalendarHeatmapTab';
 import { MonthlyCalendarTab } from './CalendarMonthlyCalendarTab';
@@ -64,10 +60,7 @@ export const CalendarPage: React.FC = () => {
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [showAdd, setShowAdd] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [notice, setNotice] = useState('');
-
   const year = filters.year;
 
   const loadData = useCallback(async () => {
@@ -124,12 +117,6 @@ export const CalendarPage: React.FC = () => {
     loadData();
   }, [loadData, reloadKey]);
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(''), 5000);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
   const activeTeams = useMemo(() => teams.filter((team) => team.aktif !== false), [teams]);
 
   const users = useMemo(() => {
@@ -158,16 +145,6 @@ export const CalendarPage: React.FC = () => {
     return Array.from(map.values()).sort((a, b) => a.nama.localeCompare(b.nama));
   }, [users, events]);
 
-  const canManage = useMemo(
-    () => user?.peran === 'admin' || activeTeams.some((team) => team.ketua_id === user?.id),
-    [user, activeTeams]
-  );
-
-  const manageableTeams = useMemo(() => {
-    if (user?.peran === 'admin') return activeTeams;
-    return activeTeams.filter((team) => team.ketua_id === user?.id);
-  }, [user, activeTeams]);
-
   const filteredEvents = useMemo(() => applyCalendarFilters(events, filters), [events, filters]);
   const hasActiveFilters = Boolean(
     filters.teamId || filters.userId || filters.status || filters.jenis || filters.search.trim()
@@ -187,13 +164,6 @@ export const CalendarPage: React.FC = () => {
     () => new Map(filteredEvents.map((event) => [event.id, event])),
     [filteredEvents]
   );
-
-  const defaultTeamId = useMemo(() => {
-    if (filters.teamId && manageableTeams.some((team) => String(team.id) === filters.teamId)) {
-      return Number(filters.teamId);
-    }
-    return manageableTeams[0]?.id;
-  }, [filters.teamId, manageableTeams]);
 
   const updateFilter = <K extends keyof CalendarFilters>(key: K, value: CalendarFilters[K]) => {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -221,18 +191,6 @@ export const CalendarPage: React.FC = () => {
     const nextMonth = ((total % 12) + 12) % 12;
     setFilters((current) => ({ ...current, year: nextYear }));
     setMonth(nextMonth);
-  };
-
-  const handleSaved = async (startYear?: number) => {
-    setShowAdd(false);
-    setNotice('Kegiatan berhasil ditambahkan.');
-
-    if (startYear && startYear !== year) {
-      setFilters((current) => ({ ...current, year: startYear }));
-      setMonth(startYear === now.getFullYear() ? now.getMonth() : 0);
-    }
-
-    setReloadKey((current) => current + 1);
   };
 
   const tabs: { id: CalendarTab; label: string; icon: React.ReactNode }[] = [
@@ -273,18 +231,6 @@ export const CalendarPage: React.FC = () => {
           >
             Muat ulang
           </button>
-
-          {canManage && (
-            <button
-              type="button"
-              onClick={() => setShowAdd(true)}
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold text-white transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ backgroundColor: PALETTE.blue }}
-            >
-              <Plus className="h-4 w-4" />
-              Tambah
-            </button>
-          )}
         </div>
       </div>
 
@@ -456,22 +402,6 @@ export const CalendarPage: React.FC = () => {
         })}
       </div>
 
-      {notice && (
-        <div
-          role="status"
-          className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs"
-          style={{ backgroundColor: PALETTE.mint, borderColor: PALETTE.teal, color: PALETTE.teal }}
-        >
-          <span className="flex items-center gap-2 font-medium">
-            <CheckCircle2 className="h-4 w-4" />
-            {notice}
-          </span>
-          <button type="button" onClick={() => setNotice('')} aria-label="Tutup notifikasi">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-
       {error && !loading && (
         <div
           className="flex flex-col items-start gap-2 rounded-lg border px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
@@ -566,29 +496,11 @@ export const CalendarPage: React.FC = () => {
         </>
       )}
 
-      {canManage && (
-        <AddActivityModal
-          open={showAdd}
-          teams={manageableTeams}
-          users={filterUsers}
-          defaultTeamId={defaultTeamId}
-          onClose={() => setShowAdd(false)}
-          onSaved={handleSaved}
-        />
-      )}
-
       {selectedEvent && (
         <ActivityDetailModal
           event={selectedEvent}
           teamStyles={teamStyles}
           onClose={() => setSelectedEvent(null)}
-          canManage={
-            user?.peran === 'admin' ||
-            activeTeams.some(
-              (team) => team.id === selectedEvent.extendedProps.team_id && team.ketua_id === user?.id
-            )
-          }
-          onChanged={() => setReloadKey((current) => current + 1)}
         />
       )}
     </div>
@@ -613,7 +525,7 @@ const EmptyState: React.FC<{
           ? 'Ubah atau reset filter untuk menampilkan kegiatan lain.'
           : hasEvents
             ? 'Coba pilih tahun lain.'
-            : 'Tambahkan kegiatan baru untuk mulai mengisi kalender.'}
+            : 'Kegiatan baru ditambahkan melalui Daftar Kegiatan.'}
       </p>
       {hasActiveFilters && (
         <button

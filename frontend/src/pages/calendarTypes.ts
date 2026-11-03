@@ -5,10 +5,11 @@ export interface AssignedUser {
   user_id: number;
   nama: string;
   peran: string;
-  volume?: number;
-  satuan?: string;
+  volume?: number | null;
+  satuan?: string | null;
   mulai?: string;
   selesai?: string;
+  metrics_visible?: boolean;
 }
 
 export interface CalendarEventExtendedProps {
@@ -120,6 +121,7 @@ export interface EmployeeSummary {
   points: number;
   peakMonth?: { key: string; label: string; points: number };
   indicator: WorkloadIndicator;
+  metricsHidden?: boolean;
 }
 
 export interface AddAssignmentForm {

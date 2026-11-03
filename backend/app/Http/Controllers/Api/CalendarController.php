@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
+use App\Support\AssignmentVisibility;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -100,8 +101,10 @@ class CalendarController extends Controller
 
         $activities = $query->orderBy('mulai', 'asc')->get();
 
+        $viewer = $request->user();
+
         // Format data sesuai standar FullCalendar
-        $events = $activities->map(function (Activity $activity) {
+        $events = $activities->map(function (Activity $activity) use ($viewer) {
             $activityMulai = $activity->mulai?->format('Y-m-d');
             $activitySelesai = $activity->selesai?->format('Y-m-d');
 
@@ -123,16 +126,21 @@ class CalendarController extends Controller
                     'keterangan' => $activity->keterangan,
                     'assignments_count' => $activity->assignments->count(),
                     // Tanggal efektif memakai fallback tanggal kegiatan tanpa memicu query tambahan per penugasan.
-                    'assigned_users' => $activity->assignments->map(fn ($assignment) => [
-                        'assignment_id' => $assignment->id,
-                        'user_id' => $assignment->user_id,
-                        'nama' => $assignment->user?->nama,
-                        'peran' => $assignment->peran,
-                        'volume' => (float) $assignment->volume,
-                        'satuan' => $assignment->satuan,
-                        'mulai' => $assignment->mulai?->format('Y-m-d') ?? $activityMulai,
-                        'selesai' => $assignment->selesai?->format('Y-m-d') ?? $activitySelesai,
-                    ]),
+                    'assigned_users' => $activity->assignments->map(function ($assignment) use ($viewer, $activityMulai, $activitySelesai, $activity) {
+                        $canViewMetrics = AssignmentVisibility::canViewMetrics($viewer, $assignment, (int) $activity->team_id);
+
+                        return [
+                            'assignment_id' => $assignment->id,
+                            'user_id' => $assignment->user_id,
+                            'nama' => $assignment->user?->nama,
+                            'peran' => $assignment->peran,
+                            'volume' => $canViewMetrics ? (float) $assignment->volume : null,
+                            'satuan' => $canViewMetrics ? $assignment->satuan : null,
+                            'mulai' => $assignment->mulai?->format('Y-m-d') ?? $activityMulai,
+                            'selesai' => $assignment->selesai?->format('Y-m-d') ?? $activitySelesai,
+                            'metrics_visible' => $canViewMetrics,
+                        ];
+                    }),
                 ],
             ];
         });

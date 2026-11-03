@@ -61,6 +61,7 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
         Route::get('activities/{activity}/assignments', [AssignmentController::class, 'indexForActivity']);
         Route::post('activities/{activity}/assignments', [AssignmentController::class, 'storeForActivity']);
         Route::post('assignments/preview', [AssignmentController::class, 'preview']);
+        Route::post('assignments/preview-batch', [AssignmentController::class, 'previewBatch']);
         Route::apiResource('assignments', AssignmentController::class)->only(['show', 'update', 'destroy']);
 
         // Monitoring Beban Kerja (PRD Bagian 14)

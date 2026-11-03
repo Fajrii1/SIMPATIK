@@ -620,10 +620,12 @@ export function buildEmployeeSummary(
       periodEnd?: string;
       dailyCounts: Map<string, number>;
       monthlyPoints: Record<string, number>;
+      metricsHidden: boolean;
     }
   >();
 
   collectAssignmentPeriods(events, year).forEach(({ event, assignment, start, end }) => {
+    const metricsVisible = assignment.metrics_visible !== false;
     const user = userMap.get(assignment.user_id);
     const existing = summaries.get(assignment.user_id) || {
       id: assignment.user_id,
@@ -636,10 +638,19 @@ export function buildEmployeeSummary(
       assignmentDays: 0,
       dailyCounts: new Map<string, number>(),
       monthlyPoints: {},
+      metricsHidden: false,
     };
 
-    existing.eventMap.set(event.id, event);
     existing.teams.set(event.extendedProps.team_id, event.extendedProps.team_nama || 'Tanpa tim');
+
+    if (!metricsVisible) {
+      // Metrik tidak boleh ditampilkan untuk penugasan yang tidak berhak dilihat.
+      existing.metricsHidden = true;
+      summaries.set(assignment.user_id, existing);
+      return;
+    }
+
+    existing.eventMap.set(event.id, event);
 
     const dates = eachDateInclusive(start, end);
     existing.assignmentDays += dates.length;
@@ -703,6 +714,7 @@ export function buildEmployeeSummary(
         points,
         peakMonth,
         indicator: determineWorkloadIndicator(persentase),
+        metricsHidden: summary.metricsHidden,
       };
     })
     .sort((a, b) => b.events.length - a.events.length || a.nama.localeCompare(b.nama));

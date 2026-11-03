@@ -498,4 +498,178 @@ class WorkloadService
             'melebihi_ambang' => $hasExceededThreshold,
         ];
     }
+
+    /**
+     * Pratinjau batch dampak beberapa penugasan dari kegiatan yang belum disimpan.
+     *
+     * Tidak menulis ke database dan tidak mengubah hasil perhitungan yang ada.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function previewBatchImpact(array $data): array
+    {
+        $teamId = (int) $data['team_id'];
+        $bobot = (float) $data['bobot'];
+        $kegiatanMulai = Carbon::parse($data['mulai'])->startOfDay();
+        $kegiatanSelesai = ! empty($data['selesai'])
+            ? Carbon::parse($data['selesai'])->startOfDay()
+            : $kegiatanMulai->copy();
+
+        $ambangBeban = (float) Setting::getVal('ambang_beban_bulanan', 100);
+        $maksPenugasan = (int) Setting::getVal('maks_penugasan_bersamaan', 3);
+
+        // Kelompokkan baris per pegawai, dengan periode efektif per baris.
+        $byUser = [];
+
+        foreach ($data['assignments'] ?? [] as $row) {
+            $userId = (int) $row['user_id'];
+            $rowMulai = ! empty($row['mulai']) ? Carbon::parse($row['mulai'])->startOfDay() : $kegiatanMulai->copy();
+            $rowSelesai = ! empty($row['selesai']) ? Carbon::parse($row['selesai'])->startOfDay() : $kegiatanSelesai->copy();
+
+            $byUser[$userId][] = array_merge($row, [
+                'user_id' => $userId,
+                'mulai' => $rowMulai,
+                'selesai' => $rowSelesai,
+            ]);
+        }
+
+        $results = [];
+
+        foreach ($byUser as $userId => $userRows) {
+            $user = User::find($userId);
+
+            if (! $user) {
+                continue;
+            }
+
+            $existingAssignments = Assignment::query()
+                ->with('activity')
+                ->where('user_id', $userId)
+                ->whereHas('activity', fn ($q) => $q->whereNull('deleted_at'))
+                ->get();
+
+            // Akumulasi tambahan poin per bulan dari seluruh baris pegawai ini.
+            $monthlyAdditions = [];
+
+            foreach ($userRows as $row) {
+                foreach ($this->calculateAssignmentMonthlyPoints((float) $row['volume'], $bobot, $row['mulai'], $row['selesai']) as $month => $points) {
+                    $monthlyAdditions[$month] = round(($monthlyAdditions[$month] ?? 0.0) + $points, 2);
+                }
+            }
+
+            ksort($monthlyAdditions);
+
+            $monthlyImpacts = [];
+            $warnings = [];
+
+            foreach ($monthlyAdditions as $month => $additionalPoints) {
+                $monthDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+                $monthStart = $monthDate->copy()->startOfMonth();
+                $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
+
+                $currentWorkload = $this->calculateMonthlyWorkloadForUser($userId, $month);
+                $bebanSebelum = $currentWorkload['beban'];
+                $bebanSesudah = round($bebanSebelum + $additionalPoints, 2);
+                $persentaseSebelum = $currentWorkload['persentase'];
+                $persentaseSesudah = $ambangBeban > 0 ? round(($bebanSesudah / $ambangBeban) * 100, 2) : 0.0;
+                $indikatorSesudah = $this->determineIndicator($persentaseSesudah);
+
+                $rowsInMonth = count(array_filter(
+                    $userRows,
+                    fn (array $row) => $row['mulai']->lte($monthEnd) && $row['selesai']->gte($monthStart)
+                ));
+                $jumlahSebelum = $currentWorkload['jumlah_penugasan'];
+                $jumlahSesudah = $jumlahSebelum + $rowsInMonth;
+
+                // Puncak harian: penugasan terdaftar ditambah baris batch pada bulan ini.
+                $dailyCounts = array_fill(1, $monthDate->daysInMonth, 0);
+
+                $countOnDay = function ($start, $end) use (&$dailyCounts, $monthStart, $monthEnd) {
+                    if ($start->lte($monthEnd) && $end->gte($monthStart)) {
+                        $clampedStart = $start->gt($monthStart) ? $start : $monthStart;
+                        $clampedEnd = $end->lt($monthEnd) ? $end : $monthEnd;
+                        for ($d = (int) $clampedStart->format('j'); $d <= (int) $clampedEnd->format('j'); $d++) {
+                            $dailyCounts[$d]++;
+                        }
+                    }
+                };
+
+                foreach ($existingAssignments as $existing) {
+                    $activity = $existing->activity;
+
+                    if (! $activity) {
+                        continue;
+                    }
+
+                    $existingStart = $existing->mulai
+                        ? Carbon::parse($existing->mulai)->startOfDay()
+                        : Carbon::parse($activity->mulai)->startOfDay();
+                    $existingEnd = $existing->selesai
+                        ? Carbon::parse($existing->selesai)->startOfDay()
+                        : Carbon::parse($activity->selesai)->startOfDay();
+
+                    $countOnDay($existingStart, $existingEnd);
+                }
+
+                foreach ($userRows as $row) {
+                    $countOnDay($row['mulai'], $row['selesai']);
+                }
+
+                $concurrencySesudah = max($dailyCounts);
+                $concurrencySebelum = $currentWorkload['penugasan_bersamaan_maks'];
+
+                if ($bebanSesudah >= $ambangBeban) {
+                    $warnings[] = [
+                        'jenis' => 'beban',
+                        'bulan' => $month,
+                        'pesan' => "Penugasan ini menyebabkan beban kerja {$user->nama} pada bulan {$month} mencapai {$bebanSesudah} poin (melebihi/mencapai ambang {$ambangBeban}).",
+                    ];
+                }
+
+                if ($concurrencySesudah >= $maksPenugasan) {
+                    $warnings[] = [
+                        'jenis' => 'penugasan_bersamaan',
+                        'bulan' => $month,
+                        'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencySesudah} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
+                    ];
+                }
+
+                $monthlyImpacts[] = [
+                    'bulan' => $month,
+                    'tambahan_poin' => $additionalPoints,
+                    'beban_sebelum' => $bebanSebelum,
+                    'beban_sesudah' => $bebanSesudah,
+                    'persentase_sebelum' => $persentaseSebelum,
+                    'persentase_sesudah' => $persentaseSesudah,
+                    'indikator_sebelum' => $currentWorkload['indikator'],
+                    'indikator_sesudah' => $indikatorSesudah,
+                    'jumlah_penugasan_sebelum' => $jumlahSebelum,
+                    'jumlah_penugasan_sesudah' => $jumlahSesudah,
+                    'penugasan_bersamaan_sebelum' => $concurrencySebelum,
+                    'penugasan_bersamaan_sesudah' => $concurrencySesudah,
+                ];
+            }
+
+            $results[] = [
+                'user_id' => $user->id,
+                'pegawai' => [
+                    'id' => $user->id,
+                    'nama' => $user->nama,
+                ],
+                'dampak_bulanan' => $monthlyImpacts,
+                'peringatan' => $warnings,
+            ];
+        }
+
+        return [
+            'kegiatan' => [
+                'team_id' => $teamId,
+                'mulai' => $kegiatanMulai->format('Y-m-d'),
+                'selesai' => $kegiatanSelesai->format('Y-m-d'),
+                'bobot' => $bobot,
+            ],
+            'rows' => $results,
+        ];
+    }
 }

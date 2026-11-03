@@ -209,3 +209,18 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
   6. **Notifikasi Perubahan Status:** Notifikasi dikirim ke pelapor, PIC, dan ketua tim, tanpa duplikat dan tanpa aktor, dengan tautan `/issues?id={id}` serta status baru dan catatan maksimal 120 karakter. Notifikasi kendala baru dan penunjukan PIC tetap memakai pola yang sama.
   7. **Halaman Detail via Query:** `IssuesPage` membuka modal detail bila parameter `id` ada di URL. Kendala yang tidak ditemukan atau di luar wewenang menampilkan pesan yang wajar, bukan layar kosong atau error mentah.
 - **Alasan:** Menutup celah buka kembali kendala oleh PIC, menjaga integritas kegiatan dan PIC terhadap tim, memberi riwayat status yang dapat dibaca, dan memastikan notifikasi status sampai ke seluruh pihak yang terlibat tanpa kebisingan.
+
+---
+
+## 14. Form Kegiatan Baru, Penanggung Jawab Wajib, dan Kalender Baca Saja (Fase 6)
+
+- **Konteks:** Kalender masih memiliki tombol tambah/edit/hapus kegiatan; form tambah kegiatan tidak menjamin adanya Penanggung Jawab; volume penugasan terlihat oleh semua peran; "Daftar Kegiatan" tidak menyediakan form lengkap dengan pemilihan penugasan satu layar.
+- **Keputusan:**
+  1. **Penanggung Jawab Wajib:** `CreateActivityRequest` mewajibkan minimal satu penugasan dan **tepat satu** dengan peran `Penanggung Jawab`. Pegawai tidak boleh ditugaskan dua kali pada kegiatan sama. Kegiatan lama yang dibuat lewat model/seed tidak terpengaruh karena aturan hanya di request API.
+  2. **Tanggal Selesai Boleh Kosong:** `selesai` dikosongkan berarti sama dengan `mulai` (diisi pada `prepareForValidation`). Berlaku sama untuk form dan kontrak API.
+  3. **Pratinjau Batch Tanpa DB:** `POST /assignments/preview-batch` menerima data kegiatan (team_id, mulai, selesai, bobot) plus baris penugasan, mengembalikan beban sebelum/sesudah, indikator, jumlah penugasan, puncak bersamaan, dan peringatan per pegawai. Hanya admin atau ketua tim dari `team_id` yang boleh memanggil. `WorkloadService` diperluas tanpa mengubah perilaku hitungan yang ada (test Fase 3 tetap lulus).
+  4. **Pembatasan Volume (Keputusan Pemilik 6):** Admin dan pimpinan melihat semua; ketua tim melihat penugasan pada kegiatan timnya; pegawai hanya melihat metrik miliknya; lainnya hanya nama dan peran. Aturan terpusat: `App::Support\AssignmentVisibility::canViewMetrics`, dipakai di AssignmentResource, CalendarController (kalender), dan WorkloadController::userDetail. Setiap payload penugasan menyertakan flag `metrics_visible`; volume/satuan/poin bernilai `null` bila tersembunyi. Perbaikan defek `userDetail` 500 (akses `->value` pada kolom string) dilakukan pada bagian yang sama dan masuk dalam cakupan ini.
+  5. **Satu Komponen Form:** `frontend/src/pages/ActivityFormModal.tsx` dipakai untuk tambah maupun ubah kegiatan di Daftar Kegiatan. Form ubah hanya mengubah data kegiatan; penugasan yang sudah ada tetap dikelola lewat bagian penugasan di halaman yang sama.
+  6. **Kalender Baca Saja:** Tombol tambah dan editor kegiatan di kalender dihapus. Tambah/ubah/hapus dilakukan dari Daftar Kegiatan (`/activities`). Kalender menyediakan tautan "Buka di Daftar Kegiatan" menuju `/activities?id={id}` yang membuka detail kegiatan.
+  7. **Periode Penugasan Tersembunyi:** Periode per penugasan disembunyikan di balik opsi "Atur periode khusus (opsional)"; default mengikuti tanggal kegiatan.
+- **Alasan:** Mengurangi duplikasi form, menegakkan peran PJ secara eksplisit, menutup kebocoran volume, dan membuat kalender murni untuk pemantauan.

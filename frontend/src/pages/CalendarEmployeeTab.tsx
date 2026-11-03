@@ -148,7 +148,7 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
           );
         })}
         <span className="ml-1">
-          Berdasarkan puncak poin bulanan terhadap ambang beban bulanan.
+          Berdasarkan puncak poin bulanan terhadap ambang beban bulanan. Tanda — berarti rincian tidak ditampilkan untuk peran yang tidak berwenang.
         </span>
       </div>
 
@@ -214,13 +214,15 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
                     </div>
                   </td>
                   <td className="py-3 pr-3 font-semibold" style={{ color: PALETTE.ink }}>
-                    {employee.events.length}
+                    {employee.metricsHidden ? '—' : employee.events.length}
                   </td>
                   <td className="py-3 pr-3" style={{ color: PALETTE.ink }}>
-                    {employee.picCount}
+                    {employee.metricsHidden ? '—' : employee.picCount}
                   </td>
                   <td className="py-3 pr-3" style={{ color: PALETTE.ink }}>
-                    {employee.periodStart && employee.periodEnd ? (
+                    {employee.metricsHidden ? (
+                      '—'
+                    ) : employee.periodStart && employee.periodEnd ? (
                       <span>
                         {formatDateId(employee.periodStart)}
                         <span className="block text-[10px]" style={{ color: PALETTE.slate }}>
@@ -232,13 +234,21 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
                     )}
                   </td>
                   <td className="py-3 pr-3" style={{ color: PALETTE.ink }}>
-                    <span className="font-semibold">{employee.assignmentDays}</span>
-                    <span className="block text-[10px]" style={{ color: PALETTE.slate }}>
-                      {employee.busyDays} hari unik
-                    </span>
+                    {employee.metricsHidden ? (
+                      '—'
+                    ) : (
+                      <>
+                        <span className="font-semibold">{employee.assignmentDays}</span>
+                        <span className="block text-[10px]" style={{ color: PALETTE.slate }}>
+                          {employee.busyDays} hari unik
+                        </span>
+                      </>
+                    )}
                   </td>
                   <td className="py-3 pr-3" style={{ color: PALETTE.ink }}>
-                    {employee.maxConcurrent > 1 ? (
+                    {employee.metricsHidden ? (
+                      '—'
+                    ) : employee.maxConcurrent > 1 ? (
                       <span className="font-semibold" style={{ color: PALETTE.coral }}>
                         {employee.maxConcurrent} tugas
                       </span>
@@ -247,52 +257,62 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
                     )}
                   </td>
                   <td className="py-3 pr-3">
-                    <span
-                      className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                      style={{ backgroundColor: workload.bg, color: workload.text, borderColor: workload.border }}
-                    >
-                      {WORKLOAD_LABELS[employee.indicator]}
-                    </span>
-                    {employee.peakMonth && (
-                      <span className="mt-1 block text-[10px]" style={{ color: PALETTE.slate }}>
-                        {employee.peakMonth.label}: {employee.peakMonth.points} poin
-                      </span>
+                    {employee.metricsHidden ? (
+                      <span style={{ color: PALETTE.slate }}>—</span>
+                    ) : (
+                      <>
+                        <span
+                          className="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                          style={{ backgroundColor: workload.bg, color: workload.text, borderColor: workload.border }}
+                        >
+                          {WORKLOAD_LABELS[employee.indicator]}
+                        </span>
+                        {employee.peakMonth && (
+                          <span className="mt-1 block text-[10px]" style={{ color: PALETTE.slate }}>
+                            {employee.peakMonth.label}: {employee.peakMonth.points} poin
+                          </span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {visible.map((event) => {
-                        const style = getTeamStyle(teamStyles, event.extendedProps.team_id);
-                        return (
-                          <button
-                            key={event.id}
-                            type="button"
-                            onClick={() => onSelect(event)}
-                            className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-[10px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2"
-                            style={{
-                              backgroundColor: style.soft,
-                              color: style.text,
-                              borderColor: style.soft,
-                            }}
-                            title={`${event.title} (${event.extendedProps.team_nama || 'Tanpa tim'})`}
-                          >
-                            {event.title}
-                          </button>
-                        );
-                      })}
+                    {employee.metricsHidden ? (
+                      <span style={{ color: PALETTE.slate }}>—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {visible.map((event) => {
+                          const style = getTeamStyle(teamStyles, event.extendedProps.team_id);
+                          return (
+                            <button
+                              key={event.id}
+                              type="button"
+                              onClick={() => onSelect(event)}
+                              className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-[10px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2"
+                              style={{
+                                backgroundColor: style.soft,
+                                color: style.text,
+                                borderColor: style.soft,
+                              }}
+                              title={`${event.title} (${event.extendedProps.team_nama || 'Tanpa tim'})`}
+                            >
+                              {event.title}
+                            </button>
+                          );
+                        })}
 
-                      {events.length > 3 && (
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(employee.id)}
-                          className="rounded-full bg-[#F7F9FC] px-2 py-0.5 text-[10px] font-medium hover:bg-[#E3EEFA] focus-visible:outline-2 focus-visible:outline-offset-2"
-                          style={{ color: PALETTE.slate }}
-                          title={events.map((event) => event.title).join(', ')}
-                        >
-                          {isExpanded ? 'Sembunyikan' : `+${events.length - 3} lainnya`}
-                        </button>
-                      )}
-                    </div>
+                        {events.length > 3 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(employee.id)}
+                            className="rounded-full bg-[#F7F9FC] px-2 py-0.5 text-[10px] font-medium hover:bg-[#E3EEFA] focus-visible:outline-2 focus-visible:outline-offset-2"
+                            style={{ color: PALETTE.slate }}
+                            title={events.map((event) => event.title).join(', ')}
+                          >
+                            {isExpanded ? 'Sembunyikan' : `+${events.length - 3} lainnya`}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

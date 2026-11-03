@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\WorkloadService;
+use App\Support\AssignmentVisibility;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -180,18 +181,25 @@ class WorkloadController extends Controller
             })
             ->get();
 
-        $assignmentDetails = $assignments->map(function ($assignment) {
+        $viewer = $currentUser;
+
+        $assignmentDetails = $assignments->map(function ($assignment) use ($viewer) {
+            $canViewMetrics = AssignmentVisibility::canViewMetrics($viewer, $assignment, (int) $assignment->activity->team_id);
+
             return [
                 'id' => $assignment->id,
                 'activity_id' => $assignment->activity_id,
                 'kegiatan' => $assignment->activity->nama,
-                'jenis_kegiatan' => $assignment->activity->jenis->value,
+                'jenis_kegiatan' => (string) $assignment->activity->jenis,
                 'tim' => $assignment->activity->team->nama,
                 'peran' => $assignment->peran,
-                'volume' => $assignment->volume,
-                'satuan' => $assignment->satuan->value,
+                'volume' => $canViewMetrics ? (float) $assignment->volume : null,
+                'satuan' => $canViewMetrics ? (string) $assignment->satuan : null,
                 'bobot' => (float) $assignment->activity->bobot,
-                'poin_total' => (float) $assignment->poin_beban,
+                'poin_total' => $canViewMetrics
+                    ? round((float) $assignment->volume * (float) ($assignment->activity->bobot ?? 1.00), 2)
+                    : null,
+                'metrics_visible' => $canViewMetrics,
                 'tanggal_mulai' => $assignment->getEffectiveMulai()->toDateString(),
                 'tanggal_selesai' => $assignment->getEffectiveSelesai()->toDateString(),
                 'status_kegiatan' => $assignment->activity->status,

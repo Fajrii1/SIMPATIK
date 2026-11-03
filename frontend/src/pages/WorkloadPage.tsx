@@ -383,15 +383,25 @@ export const WorkloadPage: React.FC = () => {
                         <div key={as.id} className="p-3 text-xs flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 bg-white">
                           <div>
                             <p className="font-semibold text-slate-800">{as.kegiatan}</p>
-                            <p className="text-slate-500 mt-0.5">
-                              {as.tim} • Peran: <span className="font-medium text-slate-700">{as.peran}</span> • Vol: {as.volume} {as.satuan}
-                            </p>
+                            {as.metrics_visible === false ? (
+                              <p className="text-slate-500 mt-0.5">
+                                {as.tim} • Peran: <span className="font-medium text-slate-700">{as.peran}</span>
+                              </p>
+                            ) : (
+                              <p className="text-slate-500 mt-0.5">
+                                {as.tim} • Peran: <span className="font-medium text-slate-700">{as.peran}</span> • Vol: {as.volume} {as.satuan}
+                              </p>
+                            )}
                             <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                               {as.tanggal_mulai} s.d. {as.tanggal_selesai}
                             </p>
                           </div>
                           <div className="sm:text-right shrink-0">
-                            <span className="font-bold text-sky-700">{as.poin_total} pt total</span>
+                            {as.metrics_visible === false ? (
+                              <span className="text-slate-400">—</span>
+                            ) : (
+                              <span className="font-bold text-sky-700">{as.poin_total} pt total</span>
+                            )}
                           </div>
                         </div>
                       ))}

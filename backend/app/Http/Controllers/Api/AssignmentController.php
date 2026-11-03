@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CreateAssignmentRequest;
+use App\Http\Requests\PreviewAssignmentBatchRequest;
 use App\Http\Requests\PreviewAssignmentRequest;
 use App\Http\Requests\UpdateAssignmentRequest;
 use App\Http\Resources\AssignmentResource;
@@ -219,6 +220,23 @@ class AssignmentController extends Controller
 
         return response()->json([
             'message' => 'Pratinjau dampak penugasan berhasil dihitung.',
+            'data' => $result,
+        ]);
+    }
+
+    /**
+     * Pratinjau batch dampak beberapa penugasan dari kegiatan yang belum disimpan (Fase 6).
+     * POST /api/assignments/preview-batch
+     */
+    public function previewBatch(PreviewAssignmentBatchRequest $request, WorkloadService $workloadService): JsonResponse
+    {
+        $validated = $request->validated();
+        $validated['selesai'] = $validated['selesai'] ?? $validated['mulai'];
+
+        $result = $workloadService->previewBatchImpact($validated);
+
+        return response()->json([
+            'message' => 'Pratinjau batch dampak penugasan berhasil dihitung.',
             'data' => $result,
         ]);
     }

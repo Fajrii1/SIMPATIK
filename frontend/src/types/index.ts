@@ -36,13 +36,15 @@ export interface Assignment {
   activity_id: number;
   user_id: number;
   peran: string;
-  volume: number;
-  satuan: string;
+  volume?: number | null;
+  satuan?: string | null;
   mulai?: string;
   selesai?: string;
   effective_mulai: string;
   effective_selesai: string;
-  poin_beban: number;
+  poin_total?: number | null;
+  poin_beban?: number | null;
+  metrics_visible?: boolean;
   user?: User;
   activity?: Activity;
 }
@@ -154,4 +156,31 @@ export interface AssignmentPreviewResult {
   has_concurrency_warning: boolean;
   concurrent_assignments_peak: number;
   points_added: number;
+}
+
+export interface PreviewBatchImpactRow {
+  bulan: string;
+  tambahan_poin: number;
+  beban_sebelum: number;
+  beban_sesudah: number;
+  persentase_sebelum: number;
+  persentase_sesudah: number;
+  indikator_sebelum: string;
+  indikator_sesudah: string;
+  jumlah_penugasan_sebelum: number;
+  jumlah_penugasan_sesudah: number;
+  penugasan_bersamaan_sebelum: number;
+  penugasan_bersamaan_sesudah: number;
+}
+
+export interface PreviewBatchPegawaiResult {
+  user_id: number;
+  pegawai: { id: number; nama: string };
+  dampak_bulanan: PreviewBatchImpactRow[];
+  peringatan: { jenis: string; bulan: string; pesan: string }[];
+}
+
+export interface PreviewBatchResponse {
+  kegiatan: { team_id: number; mulai: string; selesai: string; bobot: number };
+  rows: PreviewBatchPegawaiResult[];
 }
