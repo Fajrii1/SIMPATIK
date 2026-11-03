@@ -183,7 +183,7 @@ export const MainLayout: React.FC = () => {
 
   const sidebarContent = (compact: boolean) => (
     <>
-      {/* Brand Header */}
+      {/* Brand Header (desktop) */}
       <div
         className={`border-b border-white/10 flex items-center ${
           compact ? "flex-col justify-center gap-1 p-2" : "justify-between p-4 sm:p-5 gap-3"
@@ -207,16 +207,6 @@ export const MainLayout: React.FC = () => {
           )}
         </div>
         <div className="flex items-center">
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={compact ? "Perluas sidebar" : "Perkecil sidebar"}
-            aria-expanded={!compact}
-            title={compact ? "Perluas sidebar" : "Perkecil sidebar"}
-            className="hidden lg:flex items-center justify-center rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white transition-colors min-h-[44px] min-w-[44px]"
-          >
-            {compact ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
-          </button>
           {/* Close drawer button for mobile */}
           <button
             onClick={() => setDrawerOpen(false)}
@@ -272,6 +262,7 @@ export const MainLayout: React.FC = () => {
         className={`fixed lg:static top-0 bottom-0 left-0 z-50 ${sidebarWidth} bg-bps text-slate-100 flex flex-col border-r border-white/10 transform transition-all duration-300 ease-in-out ${
           drawerOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
+        onClick={toggleCollapsed}
       >
         {sidebarContent(drawerOpen ? false : collapsed)}
       </aside>
@@ -288,6 +279,22 @@ export const MainLayout: React.FC = () => {
               className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <Menu className="w-6 h-6" />
+            </button>
+
+            {/* Chevron toggle sidebar (desktop only) - hanya muncul saat collapse */}
+            {/* Tombol hamburger toggle sidebar (desktop only) */}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleCollapsed();
+              }}
+              aria-label={collapsed ? "Perluas sidebar" : "Perkecil sidebar"}
+              aria-expanded={!collapsed}
+              title={collapsed ? "Perluas sidebar" : "Perkecil sidebar"}
+              className="hidden lg:flex items-center justify-center rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white transition-colors min-h-[44px] min-w-[44px]"
+            >
+              <Menu className="w-5 h-5" />
             </button>
 
             {/* Judul aplikasi pindah ke navbar saat sidebar diperkecil */}
