@@ -301,7 +301,8 @@ class UserManagementTest extends TestCase
             ]);
 
             $response->assertStatus(200)
-                ->assertJsonPath('user.must_change_password', true);
+                ->assertJsonPath('user.must_change_password', true)
+                ->assertJsonMissing(['temporary_password']);
 
             $tempUser->refresh();
             $this->assertTrue((bool) $tempUser->must_change_password);

@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\LoginRequest;
 use App\Http\Resources\UserResource;
+use App\Services\UserSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly UserSessionService $userSessions,
+    ) {}
+
     /**
      * Autentikasi pengguna dan mulai sesi baru.
      */
@@ -70,6 +75,12 @@ class AuthController extends Controller
             'password' => $request->string('password')->toString(),
             'must_change_password' => false,
         ]);
+
+        $currentSessionId = $request->hasSession()
+            ? $request->session()->getId()
+            : null;
+
+        $this->userSessions->invalidate($user->id, $currentSessionId);
 
         return response()->json([
             'message' => 'Kata sandi berhasil diubah.',

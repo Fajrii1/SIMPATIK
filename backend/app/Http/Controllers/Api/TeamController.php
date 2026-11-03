@@ -10,6 +10,7 @@ use App\Http\Resources\TeamResource;
 use App\Http\Resources\UserResource;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,6 +18,10 @@ use Illuminate\Support\Facades\DB;
 
 class TeamController extends Controller
 {
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+    ) {}
+
     /**
      * Menampilkan daftar tim kerja.
      */
@@ -84,6 +89,14 @@ class TeamController extends Controller
                 $team->members()->sync($memberIds);
             }
 
+            $this->auditLogger->log(
+                'create',
+                'Team',
+                $team->id,
+                null,
+                $this->auditLogger->teamSnapshot($team->fresh())
+            );
+
             return $team;
         });
 
@@ -120,7 +133,9 @@ class TeamController extends Controller
             }
         }
 
-        DB::transaction(function () use ($team, $validated) {
+        $before = $this->auditLogger->teamSnapshot($team);
+
+        DB::transaction(function () use ($team, $validated, $before) {
             $updateData = [
                 'nama' => $validated['nama'] ?? $team->nama,
                 'aktif' => array_key_exists('aktif', $validated) ? $validated['aktif'] : $team->aktif,
@@ -141,6 +156,18 @@ class TeamController extends Controller
             } elseif (! empty($team->ketua_id) && ! $team->members()->where('user_id', $team->ketua_id)->exists()) {
                 $team->members()->attach($team->ketua_id);
             }
+
+            $after = $this->auditLogger->teamSnapshot($team->fresh());
+
+            $this->auditLogger->log('update', 'Team', $team->id, $before, $after);
+
+            if ($before['ketua_id'] !== $after['ketua_id']) {
+                $this->auditLogger->log('update_ketua', 'Team', $team->id, $before, $after);
+            }
+
+            if ($before['member_ids'] !== $after['member_ids']) {
+                $this->auditLogger->log('update_members', 'Team', $team->id, $before, $after);
+            }
         });
 
         return new TeamResource($team->fresh()->load(['ketua', 'members']));
@@ -153,7 +180,13 @@ class TeamController extends Controller
     {
         $this->authorize('delete', $team);
 
-        $team->delete();
+        DB::transaction(function () use ($team) {
+            $before = $this->auditLogger->teamSnapshot($team);
+
+            $team->delete();
+
+            $this->auditLogger->log('delete', 'Team', $team->id, $before, null);
+        });
 
         return response()->json([
             'message' => 'Tim berhasil dihapus.',
@@ -192,7 +225,19 @@ class TeamController extends Controller
             ], 422);
         }
 
-        $team->members()->attach($userId);
+        DB::transaction(function () use ($team, $userId) {
+            $before = $this->auditLogger->teamSnapshot($team);
+
+            $team->members()->attach($userId);
+
+            $this->auditLogger->log(
+                'add_member',
+                'Team',
+                $team->id,
+                $before,
+                $this->auditLogger->teamSnapshot($team->fresh())
+            );
+        });
 
         return response()->json([
             'message' => 'Anggota berhasil ditambahkan ke dalam tim.',
@@ -213,17 +258,33 @@ class TeamController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($team, $user) {
+        $ketuaCleared = false;
+
+        DB::transaction(function () use ($team, $user, &$ketuaCleared) {
+            $before = $this->auditLogger->teamSnapshot($team);
+
             // Jika anggota yang dihapus adalah ketua tim, kosongkan ketua_id
-            if ($team->ketua_id === $user->id) {
+            if ((int) $team->ketua_id === (int) $user->id) {
                 $team->update(['ketua_id' => null]);
+                $ketuaCleared = true;
             }
 
             $team->members()->detach($user->id);
+
+            $after = $this->auditLogger->teamSnapshot($team->fresh());
+            $after['ketua_dikosongkan'] = $ketuaCleared;
+
+            $this->auditLogger->log('remove_member', 'Team', $team->id, $before, $after);
         });
 
+        $message = 'Anggota berhasil dihapus dari tim kerja.';
+
+        if ($ketuaCleared) {
+            $message .= ' Ketua tim dikosongkan.';
+        }
+
         return response()->json([
-            'message' => 'Anggota berhasil dihapus dari tim kerja.',
+            'message' => $message,
         ]);
     }
 }

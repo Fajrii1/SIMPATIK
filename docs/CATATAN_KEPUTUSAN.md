@@ -181,3 +181,16 @@ Dokumen ini mencatat keputusan-keputusan teknis arsitektur database, asumsi yang
       7. Periode penugasan harus berada dalam periode kegiatan.
       8. Pimpinan hanya satu akun, yaitu kepala BPS, dan bersifat murni pemantau.
 - **Alasan:** Menutup celah otorisasi dan validasi tanpa mengubah PRD, warna, atau dependensi, serta menjaga data pengaturan yang sudah ada.
+
+---
+
+## 12. Keamanan Akun dan Audit Log (Fase 2)
+
+- **Konteks:** Peninjauan Fase 2 menemukan sesi pengguna nonaktif masih dapat memakai endpoint terautentikasi, reset sandi admin masih memakai sandi default, mutasi pengguna/tim/pengaturan belum tercatat di audit log, dan penghapusan ketua tim belum memberi pesan yang jelas.
+- **Keputusan:**
+  1. **Middleware Pengguna Aktif:** `EnsureUserIsActive` dijalankan setelah `auth:sanctum` dan sebelum `password.changed`. Bila pengguna terautentikasi berstatus nonaktif, guard web di-logout, sesi diinvalidasi bila ada, dan respons berupa HTTP 401 dengan pesan "Akun Anda dinonaktifkan.".
+  2. **Sandi Sementara Acak:** Reset sandi oleh admin tanpa mengisi kata sandi baru menghasilkan 12 karakter acak berisi huruf dan angka tanpa karakter ambigu (`0`, `O`, `o`, `1`, `I`, `l`). Kata sandi dikembalikan sebagai `temporary_password` hanya pada respons reset tersebut, tidak pernah masuk log atau audit. Frontend menampilkannya satu kali melalui modal dengan tombol salin dan peringatan bahwa sandi tidak akan ditampilkan lagi.
+  3. **Pemutusan Sesi:** `UserSessionService` menghapus baris `sessions` milik pengguna hanya bila `config('session.driver')` bernilai `database`. Driver lain dilewati karena sesi tidak disimpan di tabel tersebut. Pemutusan dijalankan saat reset sandi, penonaktifan akun, penghapusan akun, dan pergantian sandi sendiri dengan mengecualikan sesi yang sedang dipakai.
+  4. **Audit Mutasi Baru:** `AuditLogger` mencatat mutasi pengguna (buat, ubah, reset sandi, aktif/nonaktif, hapus), tim (buat, ubah, ubah ketua, ubah anggota, tambah anggota, hapus anggota, hapus tim), dan pengaturan (nilai lama dan baru per kunci yang benar-benar berubah). Snapshot audit tidak memuat kata sandi, hash, remember token, atau token lain.
+  5. **Ketua Tim Dikosongkan:** Menghapus anggota yang menjabat ketua tim atau menghapus akun yang menjadi ketua tim tetap mengosongkan `ketua_id`. Perubahan itu kini diaudit dan respons memuat pesan "Ketua tim dikosongkan.".
+- **Alasan:** Memutus akses akun nonaktif, menghilangkan sandi default yang mudah ditebak, menjaga jejak audit mutasi penting, dan mempertahankan perilaku pengosongan ketua yang sudah ada tanpa mengubah PRD atau dependensi.

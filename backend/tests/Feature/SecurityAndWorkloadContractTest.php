@@ -217,13 +217,17 @@ class SecurityAndWorkloadContractTest extends TestCase
 
     /**
      * Pengguna nonaktif ditolak dari detail penugasan.
+     *
+     * Sejak Fase 2, middleware `user.active` menolak lebih awal dengan 401
+     * beserta pesan penonaktifan, sehingga otorisasi peran tidak lagi tercapai.
      */
     public function test_inactive_user_cannot_access_assignments(): void
     {
         Sanctum::actingAs($this->nonaktifUser);
 
         $res = $this->getJson("/api/assignments/{$this->assignmentPegawaiA->id}");
-        $res->assertForbidden();
+        $res->assertUnauthorized()
+            ->assertJsonPath('message', 'Akun Anda dinonaktifkan.');
     }
 
     /**

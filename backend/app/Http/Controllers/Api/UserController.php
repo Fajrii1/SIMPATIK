@@ -10,6 +10,8 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Http\Requests\UpdateUserStatusRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\AuditLogger;
+use App\Services\UserSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -18,6 +20,11 @@ use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+        private readonly UserSessionService $userSessions,
+    ) {}
+
     /**
      * Menampilkan daftar pengguna dengan filter dan pagination.
      */
@@ -93,6 +100,14 @@ class UserController extends Controller
                 $user->teams()->sync($validated['team_ids']);
             }
 
+            $this->auditLogger->log(
+                'create',
+                'User',
+                $user->id,
+                null,
+                $this->auditLogger->userSnapshot($user->fresh())
+            );
+
             return $user;
         });
 
@@ -135,7 +150,9 @@ class UserController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($user, $validated, $request) {
+        $before = $this->auditLogger->userSnapshot($user);
+
+        $after = DB::transaction(function () use ($user, $validated, $request, $before) {
             $updateData = [
                 'nama' => $validated['nama'] ?? $user->nama,
                 'email' => $validated['email'] ?? $user->email,
@@ -154,7 +171,17 @@ class UserController extends Controller
             if (array_key_exists('team_ids', $validated)) {
                 $user->teams()->sync($validated['team_ids'] ?? []);
             }
+
+            $after = $this->auditLogger->userSnapshot($user->fresh());
+
+            $this->auditLogger->log('update', 'User', $user->id, $before, $after);
+
+            return $after;
         });
+
+        if ($before['aktif'] && ! $after['aktif']) {
+            $this->userSessions->invalidate($user->id);
+        }
 
         return new UserResource($user->fresh()->load(['teams', 'ledTeams']));
     }
@@ -175,16 +202,40 @@ class UserController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($user) {
-            // Jika pengguna menjadi ketua tim, kosongkan ketua_id pada tim yang dipimpin
-            $user->ledTeams()->update(['ketua_id' => null]);
+        $ledTeams = $user->ledTeams()->get();
+        $before = $this->auditLogger->userSnapshot($user);
+
+        DB::transaction(function () use ($user, $ledTeams, $before) {
+            // Jika pengguna menjadi ketua tim, kosongkan ketua_id pada tim yang dipimpin.
+            foreach ($ledTeams as $team) {
+                $teamBefore = $this->auditLogger->teamSnapshot($team);
+                $team->update(['ketua_id' => null]);
+
+                $this->auditLogger->log(
+                    'update_ketua',
+                    'Team',
+                    $team->id,
+                    $teamBefore,
+                    $this->auditLogger->teamSnapshot($team->fresh())
+                );
+            }
+
+            $this->userSessions->invalidate($user->id);
 
             // Lakukan soft delete
             $user->delete();
+
+            $this->auditLogger->log('delete', 'User', $user->id, $before, null);
         });
 
+        $message = 'Pengguna berhasil dinonaktifkan/dihapus.';
+
+        if ($ledTeams->isNotEmpty()) {
+            $message .= ' Ketua tim dikosongkan.';
+        }
+
         return response()->json([
-            'message' => 'Pengguna berhasil dinonaktifkan/dihapus.',
+            'message' => $message,
         ]);
     }
 
@@ -204,7 +255,24 @@ class UserController extends Controller
             ], 422);
         }
 
+        $wasActive = (bool) $user->aktif;
+        $before = $this->auditLogger->userSnapshot($user);
+
         $user->update(['aktif' => $aktif]);
+
+        if ($wasActive && ! $aktif) {
+            $this->userSessions->invalidate($user->id);
+        }
+
+        if ($wasActive !== $aktif) {
+            $this->auditLogger->log(
+                $aktif ? 'activate' : 'deactivate',
+                'User',
+                $user->id,
+                $before,
+                $this->auditLogger->userSnapshot($user->fresh())
+            );
+        }
 
         return response()->json([
             'message' => 'Status pengguna berhasil diperbarui.',
@@ -219,18 +287,65 @@ class UserController extends Controller
     {
         $this->authorize('update', $user);
 
-        $newPassword = $request->filled('password')
-            ? $request->string('password')->toString()
-            : 'password';
+        $generated = ! $request->filled('password');
+        $newPassword = $generated
+            ? $this->generateTemporaryPassword()
+            : $request->string('password')->toString();
 
-        $user->update([
-            'password' => Hash::make($newPassword),
-            'must_change_password' => true,
-        ]);
+        $before = $this->auditLogger->userSnapshot($user);
 
-        return response()->json([
+        DB::transaction(function () use ($user, $newPassword, $before) {
+            $user->update([
+                'password' => Hash::make($newPassword),
+                'must_change_password' => true,
+            ]);
+
+            $this->userSessions->invalidate($user->id);
+
+            $this->auditLogger->log(
+                'reset_password',
+                'User',
+                $user->id,
+                $before,
+                $this->auditLogger->userSnapshot($user->fresh())
+            );
+        });
+
+        $response = [
             'message' => 'Kata sandi pengguna berhasil direset. Pengguna wajib mengganti kata sandi pada login berikutnya.',
             'user' => new UserResource($user->fresh()),
-        ]);
+        ];
+
+        if ($generated) {
+            $response['temporary_password'] = $newPassword;
+        }
+
+        return response()->json($response);
+    }
+
+    /**
+     * Buat kata sandi sementara 12 karakter tanpa huruf atau angka ambigu.
+     */
+    private function generateTemporaryPassword(int $length = 12): string
+    {
+        $letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
+        $digits = '23456789';
+        $all = $letters.$digits;
+
+        $characters = [
+            $letters[random_int(0, strlen($letters) - 1)],
+            $digits[random_int(0, strlen($digits) - 1)],
+        ];
+
+        for ($index = count($characters); $index < $length; $index++) {
+            $characters[] = $all[random_int(0, strlen($all) - 1)];
+        }
+
+        for ($index = count($characters) - 1; $index > 0; $index--) {
+            $swapWith = random_int(0, $index);
+            [$characters[$index], $characters[$swapWith]] = [$characters[$swapWith], $characters[$index]];
+        }
+
+        return implode('', $characters);
     }
 }

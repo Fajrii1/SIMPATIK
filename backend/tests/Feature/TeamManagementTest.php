@@ -309,7 +309,7 @@ class TeamManagementTest extends TestCase
 
             $response = $this->deleteJson("/api/teams/{$tempTeam->id}/members/{$ketua->id}");
             $response->assertStatus(200)
-                ->assertJsonPath('message', 'Anggota berhasil dihapus dari tim kerja.');
+                ->assertJsonPath('message', 'Anggota berhasil dihapus dari tim kerja. Ketua tim dikosongkan.');
 
             $tempTeam->refresh();
             $this->assertFalse($tempTeam->members()->where('user_id', $ketua->id)->exists());

@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateSettingRequest;
 use App\Http\Resources\SettingResource;
 use App\Models\Setting;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SettingController extends Controller
 {
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+    ) {}
+
     /**
      * Menampilkan seluruh pengaturan sistem.
      */
@@ -47,34 +52,45 @@ class SettingController extends Controller
 
         $validated = $request->validated();
 
-        DB::transaction(function () use ($validated) {
-            // Update dari format flat kunci-nilai
-            $knownKeys = [
-                'ambang_beban_bulanan',
-                'maks_penugasan_bersamaan',
-                'maks_kegiatan_besar_bersamaan',
-                'pegawai_boleh_isi_kendala',
-            ];
+        $knownKeys = [
+            'ambang_beban_bulanan',
+            'maks_penugasan_bersamaan',
+            'maks_kegiatan_besar_bersamaan',
+            'pegawai_boleh_isi_kendala',
+        ];
 
-            foreach ($knownKeys as $key) {
-                if (array_key_exists($key, $validated)) {
-                    $val = $validated[$key];
-                    if (is_bool($val)) {
-                        $val = $val ? 'true' : 'false';
-                    }
-                    Setting::setVal($key, (string) $val);
-                }
+        $changes = [];
+
+        foreach ($knownKeys as $key) {
+            if (array_key_exists($key, $validated)) {
+                $changes[$key] = $this->stringifySettingValue($validated[$key]);
             }
+        }
 
-            // Update dari array settings jika disediakan
-            if (! empty($validated['settings'])) {
-                foreach ($validated['settings'] as $item) {
-                    $val = $item['nilai'];
-                    if (is_bool($val)) {
-                        $val = $val ? 'true' : 'false';
-                    }
-                    Setting::setVal($item['kunci'], (string) $val);
+        if (! empty($validated['settings'])) {
+            foreach ($validated['settings'] as $item) {
+                $changes[$item['kunci']] = $this->stringifySettingValue($item['nilai']);
+            }
+        }
+
+        DB::transaction(function () use ($changes) {
+            foreach ($changes as $key => $value) {
+                $setting = Setting::where('kunci', $key)->first();
+
+                if ($setting && $setting->nilai === $value) {
+                    continue;
                 }
+
+                Setting::setVal($key, $value);
+                $settingId = Setting::where('kunci', $key)->value('id');
+
+                $this->auditLogger->log(
+                    'update',
+                    'Setting',
+                    $settingId !== null ? (int) $settingId : null,
+                    $setting ? ['kunci' => $key, 'nilai' => $setting->nilai] : null,
+                    ['kunci' => $key, 'nilai' => $value]
+                );
             }
         });
 
@@ -96,5 +112,14 @@ class SettingController extends Controller
             'settings' => $keyValue,
             'data' => SettingResource::collection($allSettings),
         ]);
+    }
+
+    private function stringifySettingValue(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        return (string) $value;
     }
 }

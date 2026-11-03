@@ -14,6 +14,8 @@ import {
   UserPlus,
   UserMinus,
   AlertTriangle,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { User, Team } from '../types';
 import { getApiErrorMessage } from '../services/errors';
@@ -29,6 +31,9 @@ export const UsersPage: React.FC = () => {
   const [userModalError, setUserModalError] = useState('');
   const [teamModalError, setTeamModalError] = useState('');
   const [memberError, setMemberError] = useState('');
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [temporaryPasswordTarget, setTemporaryPasswordTarget] = useState('');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
 
   // User Modal State (Create & Edit)
   const [showUserModal, setShowUserModal] = useState(false);
@@ -244,15 +249,38 @@ export const UsersPage: React.FC = () => {
   };
 
   const handleResetPassword = async (user: User) => {
-    if (!confirm(`Reset kata sandi untuk ${user.nama} ke default 'password'?`)) return;
+    if (!confirm(`Reset kata sandi untuk ${user.nama}? Sistem akan membuat kata sandi sementara acak.`)) return;
     setPageError('');
     setPageSuccess('');
     try {
-      await api.patch(`/users/${user.id}/reset-password`);
-      setPageSuccess('Kata sandi berhasil direset ke "password". Pegawai diwajibkan mengganti kata sandi saat login.');
+      const res = await api.patch(`/users/${user.id}/reset-password`);
+      const temporary = res.data?.temporary_password as string | undefined;
+
+      if (temporary) {
+        setTemporaryPassword(temporary);
+        setTemporaryPasswordTarget(user.nama);
+        setCopyStatus('idle');
+      }
+
+      setPageSuccess('Kata sandi berhasil direset. Pegawai diwajibkan mengganti kata sandi saat login.');
     } catch (err: unknown) {
       setPageError(getApiErrorMessage(err, 'Gagal mereset kata sandi.'));
     }
+  };
+
+  const handleCopyTemporaryPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(temporaryPassword);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('error');
+    }
+  };
+
+  const closeTemporaryPasswordModal = () => {
+    setTemporaryPassword('');
+    setTemporaryPasswordTarget('');
+    setCopyStatus('idle');
   };
 
   return (
@@ -632,6 +660,60 @@ export const UsersPage: React.FC = () => {
               <button
                 onClick={() => setViewingUser(null)}
                 className="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg min-h-[36px]"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Sandi Sementara */}
+      {temporaryPassword && (
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="temporary-password-title"
+            className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-5 sm:p-6 space-y-4"
+          >
+            <h2 id="temporary-password-title" className="text-base font-bold text-slate-900">
+              Kata Sandi Sementara
+            </h2>
+            <p className="text-sm text-slate-600">
+              Kata sandi baru untuk <strong className="text-slate-800">{temporaryPasswordTarget}</strong>.
+            </p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-amber-800">Kata sandi sementara</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  readOnly
+                  value={temporaryPassword}
+                  aria-label="Kata sandi sementara"
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="w-full text-sm font-mono tracking-wider bg-white border border-amber-200 rounded-lg px-3 py-2 min-h-[40px]"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyTemporaryPassword}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium bg-sky-600 hover:bg-sky-700 text-white rounded-lg min-h-[40px]"
+                >
+                  {copyStatus === 'copied' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copyStatus === 'copied' ? 'Tersalin' : 'Salin'}
+                </button>
+              </div>
+              {copyStatus === 'error' && (
+                <p className="text-xs text-rose-700">Penyalinan otomatis gagal. Pilih teks lalu salin secara manual.</p>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              Kata sandi ini hanya ditampilkan sekali dan tidak akan ditampilkan lagi. Catat sekarang dan berikan kepada pengguna.
+            </p>
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeTemporaryPasswordModal}
+                className="px-4 py-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg min-h-[44px]"
               >
                 Tutup
               </button>
