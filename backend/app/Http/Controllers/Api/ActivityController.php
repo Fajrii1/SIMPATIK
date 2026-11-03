@@ -9,6 +9,7 @@ use App\Http\Resources\ActivityResource;
 use App\Models\Activity;
 use App\Models\AuditLog;
 use App\Models\Notification;
+use App\Services\WorkloadReminderService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,10 @@ use Illuminate\Support\Facades\DB;
 
 class ActivityController extends Controller
 {
+    public function __construct(
+        protected WorkloadReminderService $workloadReminder
+    ) {}
+
     /**
      * Menampilkan daftar kegiatan statistik dengan filter dan pagination (PRD Bagian 14).
      */
@@ -94,7 +99,14 @@ class ActivityController extends Controller
 
         $validated = $request->validated();
 
-        $activity = DB::transaction(function () use ($validated) {
+        $userIdsForReminder = array_values(array_unique(array_map(
+            'intval',
+            array_column($validated['assignments'] ?? [], 'user_id')
+        )));
+        $monthsForReminder = $this->workloadReminder->monthsBetween($validated['mulai'], $validated['selesai']);
+        $beforeWarnings = $this->workloadReminder->collectWarnings($userIdsForReminder, $monthsForReminder);
+
+        $activity = DB::transaction(function () use ($validated, $userIdsForReminder, $monthsForReminder, $beforeWarnings) {
             $activity = Activity::create([
                 'nama' => $validated['nama'],
                 'jenis' => $validated['jenis'],
@@ -145,6 +157,8 @@ class ActivityController extends Controller
                 'sebelum' => null,
                 'sesudah' => $activity->toArray(),
             ]);
+
+            $this->workloadReminder->notifyNewWarnings($userIdsForReminder, $monthsForReminder, $beforeWarnings);
 
             return $activity;
         });

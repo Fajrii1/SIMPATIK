@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\StatusKendala;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\User;
+use App\Models\WeeklyIssue;
 use App\Services\SimpleXlsxWriter;
 use App\Services\WorkloadService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -244,6 +246,167 @@ class ReportController extends Controller
                     $act->selesai->toDateString(),
                     $act->status,
                     $act->assignments->count(),
+                ]);
+            }
+            fclose($file);
+        };
+
+        return new StreamedResponse($callback, 200, $headers);
+    }
+
+    /**
+     * Laporan Kendala Mingguan (PDF, CSV, atau Excel).
+     *
+     * GET /api/reports/issues?format=pdf|csv|xlsx&week_from=YYYY-MM-DD&week_to=YYYY-MM-DD&team_id=X&status=terbuka
+     */
+    public function issuesReport(Request $request)
+    {
+        $currentUser = $request->user();
+        $role = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
+        $ledTeamIds = $currentUser->ledTeams()->pluck('teams.id')->map(fn ($id) => (int) $id)->all();
+        $isGlobalExporter = in_array($role, ['admin', 'pimpinan'], true);
+
+        // PRD Bagian 14: pegawai biasa tidak berhak mengekspor rekap kendala.
+        if (! $isGlobalExporter && $ledTeamIds === []) {
+            return response()->json(['message' => 'Anda tidak berwenang mengekspor laporan kendala seluruh tim.'], 403);
+        }
+
+        $weekFrom = $request->query('week_from');
+        $weekTo = $request->query('week_to');
+        $status = strtolower((string) $request->query('status', ''));
+        $format = strtolower($request->query('format', 'csv'));
+        $teamId = $request->query('team_id');
+
+        if ($teamId !== null && $teamId !== '') {
+            if (! $isGlobalExporter && ! in_array((int) $teamId, $ledTeamIds, true)) {
+                return response()->json(['message' => 'Anda hanya dapat mengekspor laporan tim yang Anda pimpin.'], 403);
+            }
+            $teamId = (int) $teamId;
+        } else {
+            $teamId = null;
+        }
+
+        if ($status !== '' && ! in_array($status, ['terbuka', 'diproses', 'selesai'], true)) {
+            return response()->json(['message' => 'Status kendala tidak valid.'], 422);
+        }
+
+        $query = WeeklyIssue::with(['team', 'pelapor', 'pic', 'activity']);
+
+        if ($weekFrom) {
+            $query->where('minggu_mulai', '>=', Carbon::parse($weekFrom)->startOfWeek(Carbon::MONDAY)->toDateString());
+        }
+
+        if ($weekTo) {
+            $query->where('minggu_mulai', '<=', Carbon::parse($weekTo)->startOfWeek(Carbon::MONDAY)->toDateString());
+        }
+
+        if ($teamId !== null) {
+            $query->where('team_id', $teamId);
+        } elseif (! $isGlobalExporter) {
+            $query->whereIn('team_id', $ledTeamIds);
+        }
+
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+
+        $issues = $query->orderBy('minggu_mulai')->orderBy('id')->get();
+
+        $rows = [];
+        foreach ($issues as $issue) {
+            $rows[] = [
+                'minggu_mulai' => $issue->minggu_mulai?->format('Y-m-d') ?? '-',
+                'tim' => $issue->team?->nama ?? '-',
+                'kegiatan' => $issue->activity?->nama ?? '-',
+                'kendala' => $issue->kendala,
+                'tindak_lanjut' => $issue->tindak_lanjut ?? '-',
+                'pelapor' => $issue->pelapor?->nama ?? '-',
+                'pic' => $issue->pic?->nama ?? '-',
+                'tenggat' => $issue->tenggat?->format('Y-m-d') ?? '-',
+                'status_key' => $issue->status instanceof StatusKendala ? $issue->status->value : (string) $issue->status,
+                'status' => $issue->status instanceof StatusKendala ? $issue->status->label() : (string) $issue->status,
+                'catatan_penutupan' => $issue->catatan_penutupan ?? '-',
+            ];
+        }
+
+        $label = ($weekFrom || $weekTo)
+            ? '_'.($weekFrom ? Carbon::parse($weekFrom)->format('Ymd') : 'awal')
+                .'-'.($weekTo ? Carbon::parse($weekTo)->format('Ymd') : 'akhir')
+            : '';
+        $filename = "Laporan_Kendala{$label}";
+
+        if ($format === 'pdf') {
+            $pdf = Pdf::loadView('reports.issues_pdf', [
+                'week_from' => $weekFrom,
+                'week_to' => $weekTo,
+                'status' => $status !== '' ? (StatusKendala::tryFrom($status)?->label() ?? $status) : null,
+                'rows' => $rows,
+                'tanggal_cetak' => Carbon::now()->isoFormat('D MMMM Y, HH:mm'),
+            ]);
+
+            return $pdf->download("{$filename}.pdf");
+        }
+
+        if ($format === 'xlsx' || $format === 'excel') {
+            $xlsxRows = [
+                ['LAPORAN KENDALA MINGGUAN BPS KOTA PALEMBANG'],
+                [],
+                ['No', 'Minggu Mulai', 'Tim', 'Kegiatan', 'Kendala', 'Tindak Lanjut', 'Pelapor', 'PIC', 'Tenggat', 'Status', 'Catatan Penutupan'],
+            ];
+
+            $no = 1;
+            foreach ($rows as $row) {
+                $xlsxRows[] = [
+                    $no++,
+                    $row['minggu_mulai'],
+                    $row['tim'],
+                    $row['kegiatan'],
+                    $row['kendala'],
+                    $row['tindak_lanjut'],
+                    $row['pelapor'],
+                    $row['pic'],
+                    $row['tenggat'],
+                    $row['status'],
+                    $row['catatan_penutupan'],
+                ];
+            }
+
+            $tempPath = SimpleXlsxWriter::createXlsx($xlsxRows, 'Kendala');
+
+            return response()->download($tempPath, "{$filename}.xlsx", [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+        }
+
+        // CSV Export
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}.csv\"",
+        ];
+
+        $callback = function () use ($rows, $label) {
+            $file = fopen('php://output', 'w');
+            // UTF-8 BOM
+            fwrite($file, "\xEF\xBB\xBF");
+            fputcsv($file, ['LAPORAN KENDALA MINGGUAN BPS KOTA PALEMBANG']);
+            fputcsv($file, ['Rentang Minggu: '.($label !== '' ? ltrim($label, '_') : 'Semua')]);
+            fputcsv($file, []);
+            fputcsv($file, ['No', 'Minggu Mulai', 'Tim', 'Kegiatan', 'Kendala', 'Tindak Lanjut', 'Pelapor', 'PIC', 'Tenggat', 'Status', 'Catatan Penutupan']);
+
+            $no = 1;
+            foreach ($rows as $row) {
+                fputcsv($file, [
+                    $no++,
+                    $row['minggu_mulai'],
+                    $row['tim'],
+                    $row['kegiatan'],
+                    $row['kendala'],
+                    $row['tindak_lanjut'],
+                    $row['pelapor'],
+                    $row['pic'],
+                    $row['tenggat'],
+                    $row['status'],
+                    $row['catatan_penutupan'],
                 ]);
             }
             fclose($file);

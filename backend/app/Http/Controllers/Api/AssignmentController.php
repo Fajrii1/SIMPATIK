@@ -11,7 +11,9 @@ use App\Models\Activity;
 use App\Models\Assignment;
 use App\Models\AuditLog;
 use App\Models\Notification;
+use App\Services\WorkloadReminderService;
 use App\Services\WorkloadService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +21,10 @@ use Illuminate\Support\Facades\DB;
 
 class AssignmentController extends Controller
 {
+    public function __construct(
+        protected WorkloadReminderService $workloadReminder
+    ) {}
+
     /**
      * Menampilkan daftar penugasan pada suatu kegiatan statistik (PRD Bagian 14).
      */
@@ -43,7 +49,14 @@ class AssignmentController extends Controller
 
         $validated = $request->validated();
 
-        $assignment = DB::transaction(function () use ($validated, $activity) {
+        $userIdsForReminder = [(int) $validated['user_id']];
+        $monthsForReminder = $this->workloadReminder->monthsBetween(
+            $this->effectiveAssignmentStart($activity, $validated['mulai'] ?? null),
+            $this->effectiveAssignmentEnd($activity, $validated['selesai'] ?? null)
+        );
+        $beforeWarnings = $this->workloadReminder->collectWarnings($userIdsForReminder, $monthsForReminder);
+
+        $assignment = DB::transaction(function () use ($validated, $activity, $userIdsForReminder, $monthsForReminder, $beforeWarnings) {
             $assignment = $activity->assignments()->create([
                 'user_id' => $validated['user_id'],
                 'peran' => $validated['peran'],
@@ -70,6 +83,8 @@ class AssignmentController extends Controller
                 'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->volume} {$assignment->satuan}).",
                 'tautan' => "/kegiatan/{$activity->id}",
             ]);
+
+            $this->workloadReminder->notifyNewWarnings($userIdsForReminder, $monthsForReminder, $beforeWarnings);
 
             return $assignment;
         });
@@ -98,7 +113,22 @@ class AssignmentController extends Controller
 
         $validated = $request->validated();
 
-        $updated = DB::transaction(function () use ($assignment, $validated) {
+        $beforeUserId = (int) $assignment->getOriginal('user_id');
+        $newUserId = (int) ($validated['user_id'] ?? $assignment->user_id);
+        $userIdsForReminder = array_values(array_unique([$beforeUserId, $newUserId]));
+
+        $oldStart = $this->effectiveAssignmentStart($assignment->activity, $assignment->mulai?->toDateString());
+        $oldEnd = $this->effectiveAssignmentEnd($assignment->activity, $assignment->selesai?->toDateString());
+        $newStart = $this->effectiveUpdateStart($assignment, $validated);
+        $newEnd = $this->effectiveUpdateEnd($assignment, $validated);
+
+        $minStart = Carbon::parse($oldStart)->lte(Carbon::parse($newStart)) ? $oldStart : $newStart;
+        $maxEnd = Carbon::parse($oldEnd)->gte(Carbon::parse($newEnd)) ? $oldEnd : $newEnd;
+
+        $monthsForReminder = $this->workloadReminder->monthsBetween($minStart, $maxEnd);
+        $beforeWarnings = $this->workloadReminder->collectWarnings($userIdsForReminder, $monthsForReminder);
+
+        $updated = DB::transaction(function () use ($assignment, $validated, $userIdsForReminder, $monthsForReminder, $beforeWarnings) {
             $sebelum = $assignment->toArray();
 
             $assignment->update($validated);
@@ -122,6 +152,8 @@ class AssignmentController extends Controller
                 'tautan' => "/kegiatan/{$assignment->activity_id}",
             ]);
 
+            $this->workloadReminder->notifyNewWarnings($userIdsForReminder, $monthsForReminder, $beforeWarnings);
+
             return $assignment;
         });
 
@@ -135,7 +167,14 @@ class AssignmentController extends Controller
     {
         $this->authorize('delete', $assignment);
 
-        DB::transaction(function () use ($assignment) {
+        $userIdsForReminder = [(int) $assignment->user_id];
+        $monthsForReminder = $this->workloadReminder->monthsBetween(
+            $this->effectiveAssignmentStart($assignment->activity, $assignment->mulai?->toDateString()),
+            $this->effectiveAssignmentEnd($assignment->activity, $assignment->selesai?->toDateString())
+        );
+        $beforeWarnings = $this->workloadReminder->collectWarnings($userIdsForReminder, $monthsForReminder);
+
+        DB::transaction(function () use ($assignment, $userIdsForReminder, $monthsForReminder, $beforeWarnings) {
             $sebelum = $assignment->toArray();
             $activityNama = $assignment->activity?->nama ?? 'Kegiatan';
             $userId = $assignment->user_id;
@@ -159,6 +198,8 @@ class AssignmentController extends Controller
                 'pesan' => "Penugasan Anda pada kegiatan '{$activityNama}' telah dihapus.",
                 'tautan' => '/kegiatan',
             ]);
+
+            $this->workloadReminder->notifyNewWarnings($userIdsForReminder, $monthsForReminder, $beforeWarnings);
         });
 
         return response()->json([
@@ -180,5 +221,37 @@ class AssignmentController extends Controller
             'message' => 'Pratinjau dampak penugasan berhasil dihitung.',
             'data' => $result,
         ]);
+    }
+
+    private function effectiveAssignmentStart(Activity $activity, ?string $mulai): string
+    {
+        return $mulai !== null && $mulai !== ''
+            ? Carbon::parse($mulai)->toDateString()
+            : Carbon::parse($activity->mulai)->toDateString();
+    }
+
+    private function effectiveAssignmentEnd(Activity $activity, ?string $selesai): string
+    {
+        return $selesai !== null && $selesai !== ''
+            ? Carbon::parse($selesai)->toDateString()
+            : Carbon::parse($activity->selesai)->toDateString();
+    }
+
+    private function effectiveUpdateStart(Assignment $assignment, array $validated): string
+    {
+        if (array_key_exists('mulai', $validated)) {
+            return $this->effectiveAssignmentStart($assignment->activity, $validated['mulai']);
+        }
+
+        return $this->effectiveAssignmentStart($assignment->activity, $assignment->mulai?->toDateString());
+    }
+
+    private function effectiveUpdateEnd(Assignment $assignment, array $validated): string
+    {
+        if (array_key_exists('selesai', $validated)) {
+            return $this->effectiveAssignmentEnd($assignment->activity, $validated['selesai']);
+        }
+
+        return $this->effectiveAssignmentEnd($assignment->activity, $assignment->selesai?->toDateString());
     }
 }

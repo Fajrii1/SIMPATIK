@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { FileSpreadsheet, Download, FileText, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Download, FileText } from 'lucide-react';
 import { Team } from '../types';
 
 export const ReportsPage: React.FC = () => {
@@ -11,6 +11,10 @@ export const ReportsPage: React.FC = () => {
   const [year, setYear] = useState<string>(() => String(new Date().getFullYear()));
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [issueTeam, setIssueTeam] = useState<string>('');
+  const [weekFrom, setWeekFrom] = useState<string>('');
+  const [weekTo, setWeekTo] = useState<string>('');
+  const [issueStatus, setIssueStatus] = useState<string>('');
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -27,6 +31,15 @@ export const ReportsPage: React.FC = () => {
   const handleDownloadWorkload = (format: 'csv' | 'xlsx' | 'pdf') => {
     const url = `/api/reports/workload?format=${format}&month=${month}${selectedTeam ? `&team_id=${selectedTeam}` : ''}`;
     window.open(url, '_blank');
+  };
+
+  const handleDownloadIssues = (format: 'csv' | 'xlsx' | 'pdf') => {
+    const params = new URLSearchParams({ format });
+    if (weekFrom) params.set('week_from', weekFrom);
+    if (weekTo) params.set('week_to', weekTo);
+    if (issueTeam) params.set('team_id', issueTeam);
+    if (issueStatus) params.set('status', issueStatus);
+    window.open(`/api/reports/issues?${params.toString()}`, '_blank');
   };
 
   const handleDownloadActivities = (format: 'csv' | 'xlsx' | 'pdf') => {
@@ -165,7 +178,93 @@ export const ReportsPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Card 3: Ekspor Kendala */}
+        <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between space-y-5 md:col-span-2">
+          <div>
+            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <h2 className="text-base font-bold text-slate-900">Ekspor Kendala Mingguan</h2>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Daftar kendala beserta minggu mulai, tim, kegiatan terkait, PIC, status, dan catatan penutupan. Filter dapat dibatasi rentang minggu, tim, atau status.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+              <div>
+                <label htmlFor="issuestatus-week-from" className="block text-xs font-semibold text-slate-700 mb-1">Minggu Mulai (dari)</label>
+                <input
+                  id="issuestatus-week-from"
+                  type="date"
+                  value={weekFrom}
+                  onChange={(e) => setWeekFrom(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
+                />
+              </div>
+              <div>
+                <label htmlFor="issuestatus-week-to" className="block text-xs font-semibold text-slate-700 mb-1">Minggu Mulai (sampai)</label>
+                <input
+                  id="issuestatus-week-to"
+                  type="date"
+                  value={weekTo}
+                  onChange={(e) => setWeekTo(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
+                />
+              </div>
+              <div>
+                <label htmlFor="issuestatus-team" className="block text-xs font-semibold text-slate-700 mb-1">Filter Tim Kerja (Opsional)</label>
+                <select
+                  id="issuestatus-team"
+                  value={issueTeam}
+                  onChange={(e) => setIssueTeam(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
+                >
+                  <option value="">Semua Tim Kerja</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.nama}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="issuestatus-status" className="block text-xs font-semibold text-slate-700 mb-1">Filter Status (Opsional)</label>
+                <select
+                  id="issuestatus-status"
+                  value={issueStatus}
+                  onChange={(e) => setIssueStatus(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
+                >
+                  <option value="">Semua Status</option>
+                  <option value="terbuka">Terbuka</option>
+                  <option value="diproses">Diproses</option>
+                  <option value="selesai">Selesai</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100">
+            <button
+              onClick={() => handleDownloadIssues('xlsx')}
+              className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition min-h-[44px]"
+            >
+              <Download className="w-4 h-4" /> Unduh XLSX
+            </button>
+            <button
+              onClick={() => handleDownloadIssues('csv')}
+              className="flex-1 min-w-[90px] flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition min-h-[44px]"
+            >
+              CSV
+            </button>
+            <button
+              onClick={() => handleDownloadIssues('pdf')}
+              className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg transition min-h-[44px]"
+            >
+              <FileText className="w-4 h-4" /> Cetak PDF
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+

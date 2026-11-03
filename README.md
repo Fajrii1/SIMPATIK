@@ -106,6 +106,48 @@ frontend/
 - `docs/PANDUAN_INSTALASI_DAN_PENGGUNAAN.md` — panduan instalasi detail.
 - `docs/` (jika ada) — catatan keputusan dan laporan fase.
 
+## Perintah Terjadwal (Scheduler)
+
+Perintah artisan `notify:due-issues` mengirim notifikasi kendala yang tenggatnya sudah lewat dan belum selesai ke PIC (bila ada) dan ketua tim pemilik tim. Maksimal satu notifikasi per kendala per hari per penerima, dan kendala selesai tidak menyimpan antrean.
+
+```bash
+cd backend
+php artisan notify:due-issues
+```
+
+Perintah ini dijadwalkan setiap hari pukul 07:00 WIB melalui `routes/console.php`:
+
+```php
+Schedule::command('notify:due-issues')->dailyAt('07:00')->timezone('Asia/Jakarta');
+```
+
+Laravel tidak menjalankan scheduler dengan sendirinya; sistem operasi harus memanggil `schedule:run` tiap menit.
+
+Cara menjalankan di Windows dengan XAMPP:
+
+1. Buat skrip `sched.bat` di folder XAMPP Anda (misal `C:\xampp\simpatik-scheduler.bat`):
+
+   ```bat
+   @echo off
+   C:\xampp\php\php.exe "C:\path\ke\repo\backend\artisan" schedule:run >> C:\xampp\simpatik-scheduler.log 2>&1
+   ```
+
+   Ganti `C:\path\ke\repo\backend` dengan lokasi repo proyek ini. Bila PHP di terminal Anda sudah bekerja, boleh memakai `php` alih-alih `C:\xampp\php\php.exe`.
+
+2. Buka Task Scheduler → Create Task… (bukan Basic Task, agar interval menit bisa diatur).
+3. Pada tab General, nama tugas: `SIMPATIK Scheduler`. Centang opsi yang diperlukan (mis. "Run whether user is logged on or not").
+4. Pada tab Triggers, New… → Daily, start time sembarang, centang "Repeat task every: 1 minutes", dan pilih durasi "indefinitely".
+5. Pada tab Actions, New… → Start a program → isi `C:\xampp\simpatik-scheduler.bat`.
+6. OK dan beri kredensial bila diminta.
+
+Ringkas jalurnya: `Windows Task Scheduler` → memanggil `php artisan schedule:run` tiap menit → Laravel menjalankan `notify:due-issues` hanya bila sekarang waktunya 07:00 Asia/Jakarta → kendala yang terlambat mendapat notifikasi.
+
+Untuk pengujian tanpa menunggu pukul 07:00, jalankan perintah langsung:
+
+```bash
+php artisan notify:due-issues
+```
+
 ## Pengujian
 
 Backend (gunakan database pengujian terpisah `jadwal_bps_test`):

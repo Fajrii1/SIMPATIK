@@ -88,5 +88,6 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
         // Pelaporan dan Ekspor (PDF/CSV)
         Route::get('reports/workload', [ReportController::class, 'workloadReport']);
         Route::get('reports/activities', [ReportController::class, 'activitiesReport']);
+        Route::get('reports/issues', [ReportController::class, 'issuesReport']);
     });
 });
