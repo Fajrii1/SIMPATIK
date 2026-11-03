@@ -246,7 +246,7 @@ const AddActivityModalContent: React.FC<AddActivityModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#12305C]/55 p-3 sm:p-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-bps/55 p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-activity-title"

@@ -542,7 +542,7 @@ export const ActivitiesPage: React.FC = () => {
 
       {/* Modal Tambah/Edit Kegiatan */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">
               {editingActivity ? 'Edit Kegiatan Statistik' : 'Tambah Kegiatan Statistik Baru'}
@@ -690,7 +690,7 @@ export const ActivitiesPage: React.FC = () => {
 
       {/* Modal Manajemen Penugasan Pegawai */}
       {selectedActivity && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-3xl w-full p-5 sm:p-6 max-h-[88vh] flex flex-col">
             <div className="flex justify-between items-start mb-3 border-b border-slate-100 pb-3">
               <div>
@@ -776,7 +776,7 @@ export const ActivitiesPage: React.FC = () => {
 
       {/* Modal Form Tambah Penugasan + Preview Impact */}
       {showAssignmentModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-slate-900 mb-3">Tugaskan Pegawai ke Kegiatan</h3>
             <form onSubmit={handleSaveAssignment} className="space-y-3.5">

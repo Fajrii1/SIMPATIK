@@ -148,7 +148,7 @@ export const MainLayout: React.FC = () => {
         } ${
           isActive
             ? "bg-sky-600 text-white shadow-sm"
-            : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            : "text-slate-300 hover:bg-white/10 hover:text-white"
         }`}
       >
         <Icon className="w-5 h-5 shrink-0" />
@@ -161,7 +161,7 @@ export const MainLayout: React.FC = () => {
     <>
       {/* Brand Header */}
       <div
-        className={`border-b border-slate-800 flex items-center ${
+        className={`border-b border-white/10 flex items-center ${
           compact ? "justify-center p-3" : "justify-between p-4 sm:p-5 gap-3"
         }`}
       >
@@ -186,7 +186,7 @@ export const MainLayout: React.FC = () => {
         <button
           onClick={() => setDrawerOpen(false)}
           aria-label="Tutup menu sidebar"
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
+          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
         >
           <X className="w-5 h-5" />
         </button>
@@ -230,7 +230,7 @@ export const MainLayout: React.FC = () => {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") setDrawerOpen(false);
           }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-bps/60 backdrop-blur-xs z-40 lg:hidden transition-opacity"
         />
       )}
 
@@ -239,7 +239,7 @@ export const MainLayout: React.FC = () => {
         onClick={() => {
           if (!drawerOpen) setCollapsed((value) => !value);
         }}
-        className={`fixed lg:static top-0 bottom-0 left-0 z-50 ${sidebarWidth} bg-slate-900 text-slate-100 flex flex-col border-r border-slate-800 transform transition-all duration-300 ease-in-out ${
+        className={`fixed lg:static top-0 bottom-0 left-0 z-50 ${sidebarWidth} bg-bps text-slate-100 flex flex-col border-r border-white/10 transform transition-all duration-300 ease-in-out ${
           drawerOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         } ${collapsed && !drawerOpen ? "cursor-pointer" : ""}`}
       >
@@ -249,13 +249,13 @@ export const MainLayout: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Navbar */}
-        <header className="h-16 bg-slate-900 border-b border-slate-800 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-xs">
+        <header className="h-16 bg-bps border-b border-white/10 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-xs">
           <div className="flex items-center gap-3">
             {/* Hamburger button on Mobile/Tablet */}
             <button
               onClick={() => setDrawerOpen(true)}
               aria-label="Buka menu navigasi"
-              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -276,7 +276,7 @@ export const MainLayout: React.FC = () => {
           <div className="flex items-center gap-2 sm:gap-4">
             <Link
               to="/notifications"
-              className="relative p-2.5 rounded-full hover:bg-slate-800 text-white transition min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="relative p-2.5 rounded-full hover:bg-white/10 text-white transition min-h-[44px] min-w-[44px] flex items-center justify-center"
               title="Notifikasi"
               aria-label="Lihat Notifikasi"
             >
@@ -356,7 +356,7 @@ export const MainLayout: React.FC = () => {
 
       {/* Logout confirmation dialog */}
       {confirmLogout && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-bps/60 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-base font-bold text-slate-800">Konfirmasi Keluar</h2>
             <p className="mt-2 text-sm text-slate-600">

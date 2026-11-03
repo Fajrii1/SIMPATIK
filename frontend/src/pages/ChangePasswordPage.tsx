@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 const PALETTE = {
-  navy: '#12305C',
+  navy: 'var(--color-bps)',
   blue: '#1F4E8C',
   paleBlue: '#E3EEFA',
   bg: '#F7F9FC',

@@ -332,7 +332,7 @@ export const IssuesPage: React.FC = () => {
 
       {/* Modal Lapor Kendala */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-6">
             <h2 className="text-lg font-bold text-slate-900 mb-4">Laporkan Kendala Lapangan</h2>
             <form onSubmit={handleCreate} className="space-y-4">
@@ -426,7 +426,7 @@ export const IssuesPage: React.FC = () => {
 
       {/* Modal Update Status */}
       {activeIssue && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-6">
             <h2 className="text-base font-bold text-slate-900 mb-1">Tindak Lanjut & Status Kendala</h2>
             <p className="text-xs text-slate-500 mb-4 font-medium">{activeIssue.kendala}</p>

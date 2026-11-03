@@ -14,7 +14,7 @@ import type {
 } from './calendarTypes';
 
 export const PALETTE = {
-  navy: '#12305C',
+  navy: 'var(--color-bps)',
   blue: '#1F4E8C',
   sky: '#3B82C4',
   paleBlue: '#E3EEFA',

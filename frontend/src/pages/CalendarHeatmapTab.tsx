@@ -253,7 +253,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
 
       {dayDetail && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#12305C]/50 p-3 sm:p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-bps/50 p-3 sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="heatmap-day-title"

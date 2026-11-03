@@ -115,7 +115,7 @@ export const MonthlyCalendarTab: React.FC<MonthlyCalendarTabProps> = ({
             type="button"
             onClick={onPrevMonth}
             aria-label="Bulan sebelumnya"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#E3EEFA] text-[#5B6676] transition hover:bg-[#E3EEFA] hover:text-[#12305C] focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#E3EEFA] text-[#5B6676] transition hover:bg-[#E3EEFA] hover:text-bps focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -128,7 +128,7 @@ export const MonthlyCalendarTab: React.FC<MonthlyCalendarTabProps> = ({
             type="button"
             onClick={onNextMonth}
             aria-label="Bulan berikutnya"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#E3EEFA] text-[#5B6676] transition hover:bg-[#E3EEFA] hover:text-[#12305C] focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#E3EEFA] text-[#5B6676] transition hover:bg-[#E3EEFA] hover:text-bps focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -307,7 +307,7 @@ export const MonthlyCalendarTab: React.FC<MonthlyCalendarTabProps> = ({
 
       {dayDetail && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#12305C]/50 p-3 sm:p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-bps/50 p-3 sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="day-detail-title"

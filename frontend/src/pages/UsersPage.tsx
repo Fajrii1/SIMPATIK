@@ -527,7 +527,7 @@ export const UsersPage: React.FC = () => {
 
       {/* Modal User (Create & Edit) */}
       {showUserModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-base font-bold text-slate-900 mb-4">
               {editingUser ? 'Edit Data Pegawai' : 'Tambah Pegawai Baru'}
@@ -617,7 +617,7 @@ export const UsersPage: React.FC = () => {
 
       {/* Modal Detail User */}
       {viewingUser && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4">
             <h3 className="font-bold text-slate-900 text-base border-b pb-2">Detail Aparatur BPS</h3>
             <div className="text-xs space-y-2 text-slate-700">
@@ -642,7 +642,7 @@ export const UsersPage: React.FC = () => {
 
       {/* Modal Tim (Create & Edit) */}
       {showTeamModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-base font-bold text-slate-900 mb-4">
               {editingTeam ? 'Edit Tim Kerja' : 'Tambah Tim Kerja Baru'}
@@ -711,7 +711,7 @@ export const UsersPage: React.FC = () => {
 
       {/* Modal Manajemen Anggota Tim */}
       {viewingTeam && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-5 sm:p-6 max-h-[85vh] flex flex-col">
             <h3 className="font-bold text-slate-900 text-base mb-2">
               Anggota: {viewingTeam.nama}

@@ -332,7 +332,7 @@ export const WorkloadPage: React.FC = () => {
 
       {/* Modal Detail Pegawai */}
       {selectedUserId && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-2xl w-full p-5 sm:p-6 max-h-[85vh] flex flex-col">
             <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-3">
               <div>

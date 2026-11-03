@@ -162,7 +162,7 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setSortDirection((current) => (current === 'desc' ? 'asc' : 'desc'))}
-                  className="inline-flex items-center gap-1 font-semibold hover:text-[#12305C]"
+                  className="inline-flex items-center gap-1 font-semibold hover:text-bps"
                   aria-label={`Urutkan kegiatan ${sortDirection === 'desc' ? 'naik' : 'turun'}`}
                 >
                   Kegiatan <ArrowUpDown className="h-3 w-3" />
