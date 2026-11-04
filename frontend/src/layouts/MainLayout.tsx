@@ -82,7 +82,10 @@ export const MainLayout: React.FC = () => {
   // Close profile dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+      if (
+        profileRef.current &&
+        !profileRef.current.contains(event.target as Node)
+      ) {
         setProfileOpen(false);
       }
     };
@@ -93,7 +96,9 @@ export const MainLayout: React.FC = () => {
   }, [profileOpen]);
 
   const canViewReports =
-    user?.peran === "admin" || user?.peran === "pimpinan" || Boolean(user?.is_ketua);
+    user?.peran === "admin" ||
+    user?.peran === "pimpinan" ||
+    Boolean(user?.is_ketua);
 
   const mainNavItems = [
     { label: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -109,7 +114,6 @@ export const MainLayout: React.FC = () => {
   const adminNavItems = [
     { label: "Manajemen Pengguna & Tim", path: "/users", icon: Users },
     { label: "Pengaturan Sistem", path: "/settings", icon: Settings },
-    { label: "Audit Log", path: "/audit-logs", icon: Shield },
   ];
 
   const handleNavClick = () => {
@@ -151,7 +155,14 @@ export const MainLayout: React.FC = () => {
 
   const sidebarWidth = collapsed ? "w-20" : "w-64";
 
-  const renderNavItem = (item: { label: string; path: string; icon: React.ComponentType<{ className?: string }> }, compact: boolean) => {
+  const renderNavItem = (
+    item: {
+      label: string;
+      path: string;
+      icon: React.ComponentType<{ className?: string }>;
+    },
+    compact: boolean,
+  ) => {
     const Icon = item.icon;
     const isActive =
       location.pathname === item.path ||
@@ -184,10 +195,14 @@ export const MainLayout: React.FC = () => {
       {/* Brand Header (desktop) */}
       <div
         className={`border-b border-white/10 flex items-center ${
-          compact ? "flex-col justify-center gap-1 p-2" : "justify-between p-4 sm:p-5 gap-3"
+          compact
+            ? "flex-col justify-center gap-1 p-2"
+            : "justify-between p-4 sm:p-5 gap-3"
         }`}
       >
-        <div className={`flex items-center ${compact ? "justify-center" : "gap-3"}`}>
+        <div
+          className={`flex items-center ${compact ? "justify-center" : "gap-3"}`}
+        >
           <img
             src="/LogoBPS2.png"
             alt="Logo BPS"
@@ -267,7 +282,11 @@ export const MainLayout: React.FC = () => {
             return;
           }
 
-          if ((event.target as HTMLElement).closest('a,button,input,select,textarea,[role="button"]')) {
+          if (
+            (event.target as HTMLElement).closest(
+              'a,button,input,select,textarea,[role="button"]',
+            )
+          ) {
             return;
           }
 
@@ -364,7 +383,9 @@ export const MainLayout: React.FC = () => {
                     <p className="text-sm font-semibold text-slate-800 truncate">
                       {user?.nama}
                     </p>
-                    <p className="text-xs text-slate-500 capitalize">{user?.peran}</p>
+                    <p className="text-xs text-slate-500 capitalize">
+                      {user?.peran}
+                    </p>
                   </div>
                   <div className="py-1">
                     <Link
@@ -404,7 +425,9 @@ export const MainLayout: React.FC = () => {
       {confirmLogout && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-bps/60 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl">
-            <h2 className="text-base font-bold text-slate-800">Konfirmasi Keluar</h2>
+            <h2 className="text-base font-bold text-slate-800">
+              Konfirmasi Keluar
+            </h2>
             <p className="mt-2 text-sm text-slate-600">
               Apakah Anda yakin ingin keluar dari aplikasi?
             </p>

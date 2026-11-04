@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AssignmentController;
-use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\DashboardController;
@@ -85,7 +84,6 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
         Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
         // Audit Log (Khusus Admin)
-        Route::get('audit-logs', [AuditLogController::class, 'index']);
 
         // Pelaporan dan Ekspor (PDF/CSV)
         Route::get('reports/workload', [ReportController::class, 'workloadReport']);

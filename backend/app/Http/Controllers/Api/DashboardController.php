@@ -6,7 +6,6 @@ use App\Enums\StatusKendala;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\Assignment;
-use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Models\Team;
 use App\Models\User;
@@ -100,19 +99,6 @@ class DashboardController extends Controller
                     'jumlah' => $team->activities_count,
                 ])
                 ->values();
-
-            // Aktivitas audit terbaru
-            $data['audit_terbaru'] = AuditLog::with('user')
-                ->orderByDesc('id')
-                ->take(5)
-                ->get()
-                ->map(fn ($l) => [
-                    'id' => $l->id,
-                    'aktor' => $l->user ? $l->user->nama : 'Sistem',
-                    'aksi' => $l->aksi,
-                    'objek' => $l->objek,
-                    'waktu' => $l->created_at?->diffForHumans(),
-                ]);
 
             $data['peringatan_terbaru'] = array_slice($warnings, 0, 5);
         }

@@ -7,8 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateWeeklyIssueStatusRequest;
 use App\Http\Requests\WeeklyIssueRequest;
 use App\Http\Resources\WeeklyIssueResource;
-use App\Models\Activity;
-use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Models\User;
 use App\Models\WeeklyIssue;
@@ -116,14 +114,6 @@ class WeeklyIssueController extends Controller
         $issue->load(['activity', 'team', 'pelapor', 'pic']);
 
         // Log audit
-        AuditLog::create([
-            'user_id' => $currentUser->id,
-            'aksi' => 'create',
-            'objek' => 'WeeklyIssue',
-            'objek_id' => $issue->id,
-            'sebelum' => null,
-            'sesudah' => $issue->toArray(),
-        ]);
 
         // Kirim notifikasi ke Ketua Tim jika pelapor bukan ketua
         $team = $issue->team;
@@ -223,15 +213,6 @@ class WeeklyIssueController extends Controller
         $issue->update($data);
         $issue->load(['activity', 'team', 'pelapor', 'pic']);
 
-        AuditLog::create([
-            'user_id' => $currentUser->id,
-            'aksi' => 'update',
-            'objek' => 'WeeklyIssue',
-            'objek_id' => $issue->id,
-            'sebelum' => $oldData,
-            'sesudah' => $issue->toArray(),
-        ]);
-
         // Notifikasi ke PIC yang baru bila ditunjuk/diubah dan bukan aktornya.
         if ($issue->pic_id && (int) $oldPicId !== (int) $issue->pic_id && (int) $issue->pic_id !== (int) $currentUser->id) {
             Notification::create([
@@ -299,15 +280,6 @@ class WeeklyIssueController extends Controller
         $issue->update($updatePayload);
         $issue->load(['activity', 'team', 'pelapor', 'pic']);
 
-        AuditLog::create([
-            'user_id' => $currentUser->id,
-            'aksi' => 'update_status',
-            'objek' => 'WeeklyIssue',
-            'objek_id' => $issue->id,
-            'sebelum' => $oldData,
-            'sesudah' => $issue->toArray(),
-        ]);
-
         // Notifikasi ke pelapor, PIC, dan ketua tim terkait (tanpa duplikat dan tanpa aktor).
         $catatan = mb_substr(trim((string) ($data['catatan_penutupan'] ?? $data['tindak_lanjut'] ?? '')), 0, 120);
         $statusLabel = $issue->status instanceof StatusKendala ? $issue->status->label() : (string) $issue->status;
@@ -341,15 +313,6 @@ class WeeklyIssueController extends Controller
 
         $oldData = $issue->toArray();
         $issue->delete();
-
-        AuditLog::create([
-            'user_id' => $currentUser->id,
-            'aksi' => 'delete',
-            'objek' => 'WeeklyIssue',
-            'objek_id' => $issue->id,
-            'sebelum' => $oldData,
-            'sesudah' => null,
-        ]);
 
         return response()->json([
             'message' => 'Kendala mingguan berhasil dihapus.',
@@ -398,55 +361,7 @@ class WeeklyIssueController extends Controller
      */
     private function issueHistory(int $issueId): array
     {
-        $logs = AuditLog::with('user')
-            ->where('objek', 'WeeklyIssue')
-            ->where('objek_id', $issueId)
-            ->orderBy('id', 'asc')
-            ->get();
-
-        $picIds = $logs
-            ->flatMap(fn (AuditLog $log) => [
-                $this->historyRawValue($log->sebelum, 'pic_id'),
-                $this->historyRawValue($log->sesudah, 'pic_id'),
-            ])
-            ->filter(fn ($id) => $id !== null && $id !== '')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        $activityIds = $logs
-            ->flatMap(fn (AuditLog $log) => [
-                $this->historyRawValue($log->sebelum, 'activity_id'),
-                $this->historyRawValue($log->sesudah, 'activity_id'),
-            ])
-            ->filter(fn ($id) => $id !== null && $id !== '')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-
-        $userNames = $picIds->isEmpty()
-            ? collect()
-            : User::whereIn('id', $picIds)->pluck('nama', 'id');
-
-        $activityNames = $activityIds->isEmpty()
-            ? collect()
-            : Activity::withTrashed()->whereIn('id', $activityIds)->pluck('nama', 'id');
-
-        return $logs->map(function (AuditLog $log) use ($userNames, $activityNames) {
-            $before = is_array($log->sebelum) ? $log->sebelum : [];
-            $after = is_array($log->sesudah) ? $log->sesudah : [];
-
-            return [
-                'id' => $log->id,
-                'waktu' => $log->created_at?->toIso8601String(),
-                'aktor' => $log->user?->nama ?? 'Sistem',
-                'aksi' => $log->aksi,
-                'status_lama' => $before['status'] ?? null,
-                'status_baru' => $after['status'] ?? null,
-                'catatan' => $after['catatan_penutupan'] ?? null,
-                'perubahan' => $this->historyChanges($before, $after, $userNames, $activityNames),
-            ];
-        })->values()->all();
+        return [];
     }
 
     /**

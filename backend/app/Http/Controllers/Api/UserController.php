@@ -21,8 +21,8 @@ use Illuminate\Support\Facades\Hash;
 class UserController extends Controller
 {
     public function __construct(
-        private readonly AuditLogger $auditLogger,
         private readonly UserSessionService $userSessions,
+        private readonly AuditLogger $auditLogger,
     ) {}
 
     /**

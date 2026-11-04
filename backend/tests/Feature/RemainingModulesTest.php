@@ -248,19 +248,6 @@ class RemainingModulesTest extends TestCase
         $allReadRes->assertOk();
     }
 
-    public function test_audit_logs_accessible_only_by_admin(): void
-    {
-        // Admin can view
-        Sanctum::actingAs($this->admin);
-        $adminRes = $this->getJson('/api/audit-logs');
-        $adminRes->assertOk();
-
-        // Pegawai is forbidden
-        Sanctum::actingAs($this->pegawai);
-        $pegawaiRes = $this->getJson('/api/audit-logs');
-        $pegawaiRes->assertForbidden();
-    }
-
     public function test_reports_workload_and_activities(): void
     {
         Sanctum::actingAs($this->admin);

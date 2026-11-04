@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\PeranPengguna;
-use App\Models\AuditLog;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\UserSessionService;
@@ -81,19 +80,6 @@ class AccountSecurityTest extends TestCase
             $this->assertFalse(Hash::check('password-lama', $user->password));
             $this->assertTrue((bool) $user->must_change_password);
 
-            $log = AuditLog::where('objek', 'User')
-                ->where('objek_id', $user->id)
-                ->where('aksi', 'reset_password')
-                ->latest('id')
-                ->first();
-
-            $this->assertNotNull($log);
-            $this->assertArrayNotHasKey('password', $log->sebelum ?? []);
-            $this->assertArrayNotHasKey('password', $log->sesudah ?? []);
-            $auditPayload = json_encode([$log->sebelum, $log->sesudah]);
-            $this->assertStringNotContainsString($temporary, $auditPayload);
-            $this->assertStringNotContainsString($user->password, $auditPayload);
-
             Sanctum::actingAs($user->fresh());
             $this->getJson('/api/dashboard')
                 ->assertStatus(403)
@@ -167,12 +153,6 @@ class AccountSecurityTest extends TestCase
                 ->assertJsonPath('user.aktif', false);
 
             $this->assertDatabaseMissing('sessions', ['id' => 'sesi-nonaktif']);
-            $this->assertTrue(
-                AuditLog::where('objek', 'User')
-                    ->where('objek_id', $user->id)
-                    ->where('aksi', 'deactivate')
-                    ->exists()
-            );
         } finally {
             DB::table('sessions')->where('id', 'sesi-nonaktif')->delete();
             $user->forceDelete();
@@ -218,19 +198,6 @@ class AccountSecurityTest extends TestCase
             $this->assertSoftDeleted('users', ['id' => $user->id]);
             $this->assertDatabaseMissing('sessions', ['id' => 'sesi-hapus-ketua']);
 
-            $this->assertTrue(
-                AuditLog::where('objek', 'User')
-                    ->where('objek_id', $user->id)
-                    ->where('aksi', 'delete')
-                    ->exists()
-            );
-
-            $this->assertTrue(
-                AuditLog::where('objek', 'Team')
-                    ->where('objek_id', $team->id)
-                    ->where('aksi', 'update_ketua')
-                    ->exists()
-            );
         } finally {
             DB::table('sessions')->where('id', 'sesi-hapus-ketua')->delete();
             $team->members()->detach();

@@ -25,7 +25,6 @@ class DatabaseSchemaTest extends TestCase
             'assignments',
             'weekly_issues',
             'notifications',
-            'audit_logs',
             'settings',
         ];
 
@@ -187,7 +186,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $schema = Schema::connection($this->connection);
 
-        $nonSdTables = ['notifications', 'audit_logs', 'settings'];
+        $nonSdTables = ['notifications', 'settings'];
 
         foreach ($nonSdTables as $table) {
             $this->assertFalse(
@@ -207,7 +206,6 @@ class DatabaseSchemaTest extends TestCase
             'assignments' => 'idx_assignments_user_timeline',
             'weekly_issues' => 'idx_weekly_issues_team_week_status',
             'notifications' => 'idx_notifications_user_read',
-            'audit_logs' => 'idx_audit_logs_object',
         ];
 
         foreach ($indexes as $table => $indexName) {

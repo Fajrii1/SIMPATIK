@@ -125,7 +125,7 @@ class DemoDataSeeder extends Seeder
             AssignmentSeeder::class,
             WeeklyIssueSeeder::class,
             NotificationSeeder::class,
-            AuditLogSeeder::class,
+
         ]);
     }
 }

@@ -6,7 +6,6 @@ use App\Enums\PeranPengguna;
 use App\Enums\StatusKendala;
 use App\Models\Activity;
 use App\Models\Assignment;
-use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Models\Setting;
 use App\Models\Team;
@@ -180,20 +179,15 @@ class DatabaseDataIntegrityTest extends TestCase
     }
 
     /**
-     * Memverifikasi notifikasi dan audit log terisi.
+     * Memverifikasi notifikasi terisi.
      */
-    public function test_notifications_and_audit_logs_exist(): void
+    public function test_notifications_exist(): void
     {
         $this->assertGreaterThan(0, Notification::count());
-        $this->assertGreaterThan(0, AuditLog::count());
 
         $unreadNotif = Notification::unread()->first();
         $this->assertNotNull($unreadNotif);
         $this->assertFalse($unreadNotif->isRead());
-
-        $auditLog = AuditLog::first();
-        $this->assertNotNull($auditLog);
-        $this->assertIsArray($auditLog->sesudah);
     }
 
     /**

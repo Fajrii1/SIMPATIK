@@ -7,14 +7,12 @@ use App\Http\Requests\CreateActivityRequest;
 use App\Http\Requests\UpdateActivityRequest;
 use App\Http\Resources\ActivityResource;
 use App\Models\Activity;
-use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Services\WorkloadReminderService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ActivityController extends Controller
@@ -131,15 +129,6 @@ class ActivityController extends Controller
                     'selesai' => $assignmentData['selesai'] ?? null,
                 ]);
 
-                AuditLog::create([
-                    'user_id' => Auth::id(),
-                    'aksi' => 'create',
-                    'objek' => 'Assignment',
-                    'objek_id' => $assignment->id,
-                    'sebelum' => null,
-                    'sesudah' => $assignment->toArray(),
-                ]);
-
                 Notification::create([
                     'user_id' => $assignment->user_id,
                     'tipe' => 'penugasan_baru',
@@ -149,14 +138,6 @@ class ActivityController extends Controller
             }
 
             // Catat ke audit_logs (PRD Bagian 8.4)
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'create',
-                'objek' => 'Activity',
-                'objek_id' => $activity->id,
-                'sebelum' => null,
-                'sesudah' => $activity->toArray(),
-            ]);
 
             $this->workloadReminder->notifyNewWarnings($userIdsForReminder, $monthsForReminder, $beforeWarnings);
 
@@ -214,14 +195,6 @@ class ActivityController extends Controller
             $sesudah = $activity->fresh()->toArray();
 
             // Catat ke audit_logs
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'update',
-                'objek' => 'Activity',
-                'objek_id' => $activity->id,
-                'sebelum' => $sebelum,
-                'sesudah' => $sesudah,
-            ]);
 
             // Jika jadwal berubah, beri notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             $newMulai = $activity->mulai?->format('Y-m-d');
@@ -269,14 +242,7 @@ class ActivityController extends Controller
             $activity->delete();
 
             // Catat ke audit_logs
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'delete',
-                'objek' => 'Activity',
-                'objek_id' => $activity->id,
-                'sebelum' => $sebelum,
-                'sesudah' => null,
-            ]);
+
         });
 
         return response()->json([
@@ -297,15 +263,6 @@ class ActivityController extends Controller
             $activity->update([
                 'selesai_manual' => true,
                 'selesai_pada' => Carbon::now(),
-            ]);
-
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'complete',
-                'objek' => 'Activity',
-                'objek_id' => $activity->id,
-                'sebelum' => $sebelum,
-                'sesudah' => $activity->fresh()->toArray(),
             ]);
 
             return $activity;
@@ -330,15 +287,6 @@ class ActivityController extends Controller
             $activity->update([
                 'selesai_manual' => false,
                 'selesai_pada' => null,
-            ]);
-
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'reopen',
-                'objek' => 'Activity',
-                'objek_id' => $activity->id,
-                'sebelum' => $sebelum,
-                'sesudah' => $activity->fresh()->toArray(),
             ]);
 
             return $activity;

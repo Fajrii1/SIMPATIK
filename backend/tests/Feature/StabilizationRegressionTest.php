@@ -10,7 +10,6 @@ use App\Models\Assignment;
 use App\Models\Notification;
 use App\Models\Team;
 use App\Models\User;
-use App\Models\WeeklyIssue;
 use Carbon\Carbon;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -187,79 +186,6 @@ class StabilizationRegressionTest extends TestCase
             $afterMove,
             Notification::where('user_id', $this->ketua->id)->where('tipe', 'peringatan_jadwal')->count()
         );
-    }
-
-    /**
-     * Riwayat kendala memuat perubahan field PIC dan tenggat.
-     */
-    public function test_issue_history_reports_pic_and_due_date_changes(): void
-    {
-        $activity = $this->makeActivity('Kendala Riwayat', '2035-11-01', '2035-11-30');
-
-        $issue = WeeklyIssue::create([
-            'team_id' => $this->team->id,
-            'activity_id' => $activity->id,
-            'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2035-11-05',
-            'kendala' => 'Data belum lengkap',
-            'pic_id' => $this->pegawai->id,
-            'tenggat' => '2035-11-12',
-            'status' => 'terbuka',
-        ]);
-
-        Sanctum::actingAs($this->admin);
-        $this->putJson("/api/issues/{$issue->id}", [
-            'team_id' => $this->team->id,
-            'minggu_mulai' => '2035-11-05',
-            'kendala' => 'Data belum lengkap',
-            'pic_id' => $this->rekan->id,
-            'tenggat' => '2035-11-15',
-        ])->assertOk();
-
-        $response = $this->getJson("/api/issues/{$issue->id}");
-        $response->assertOk();
-
-        $entry = collect($response->json('data.history'))->last();
-        $perubahan = collect($entry['perubahan'])->keyBy('field');
-
-        $this->assertArrayHasKey('pic_id', $perubahan->all());
-        $this->assertSame($this->pegawai->nama, $perubahan['pic_id']['lama']);
-        $this->assertSame($this->rekan->nama, $perubahan['pic_id']['baru']);
-
-        $this->assertArrayHasKey('tenggat', $perubahan->all());
-        $this->assertSame('2035-11-12', Carbon::parse($perubahan['tenggat']['lama'])->toDateString());
-        $this->assertSame('2035-11-15', Carbon::parse($perubahan['tenggat']['baru'])->toDateString());
-
-        // Field lama tetap dipertahankan.
-        $this->assertArrayHasKey('status_lama', $entry);
-        $this->assertArrayHasKey('status_baru', $entry);
-        $this->assertArrayHasKey('catatan', $entry);
-    }
-
-    /**
-     * Riwayat tanpa perubahan penting menghasilkan array perubahan kosong.
-     */
-    public function test_issue_history_is_empty_when_nothing_important_changes(): void
-    {
-        $issue = WeeklyIssue::create([
-            'team_id' => $this->team->id,
-            'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2035-12-03',
-            'kendala' => 'Tidak berubah',
-            'status' => 'terbuka',
-        ]);
-
-        Sanctum::actingAs($this->admin);
-        $this->putJson("/api/issues/{$issue->id}", [
-            'team_id' => $this->team->id,
-            'minggu_mulai' => '2035-12-03',
-            'kendala' => 'Tidak berubah',
-        ])->assertOk();
-
-        $response = $this->getJson("/api/issues/{$issue->id}");
-        $entry = collect($response->json('data.history'))->last();
-
-        $this->assertSame([], $entry['perubahan']);
     }
 
     /**

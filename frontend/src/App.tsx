@@ -12,7 +12,6 @@ import { ReportsPage } from './pages/ReportsPage';
 import { UsersPage } from './pages/UsersPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 
@@ -109,14 +108,6 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute adminOnly>
                   <SettingsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/audit-logs"
-              element={
-                <ProtectedRoute adminOnly>
-                  <AuditLogsPage />
                 </ProtectedRoute>
               }
             />

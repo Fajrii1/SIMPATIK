@@ -10,7 +10,6 @@ use App\Http\Requests\UpdateAssignmentRequest;
 use App\Http\Resources\AssignmentResource;
 use App\Models\Activity;
 use App\Models\Assignment;
-use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Models\User;
 use App\Services\WorkloadReminderService;
@@ -18,7 +17,6 @@ use App\Services\WorkloadService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class AssignmentController extends Controller
@@ -69,14 +67,6 @@ class AssignmentController extends Controller
             ]);
 
             // Catat log audit (PRD Bagian 8.4)
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'create',
-                'objek' => 'Assignment',
-                'objek_id' => $assignment->id,
-                'sebelum' => null,
-                'sesudah' => $assignment->toArray(),
-            ]);
 
             // Kirim notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             Notification::create([
@@ -137,14 +127,6 @@ class AssignmentController extends Controller
             $sesudah = $assignment->fresh()->toArray();
 
             // Catat log audit
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'update',
-                'objek' => 'Assignment',
-                'objek_id' => $assignment->id,
-                'sebelum' => $sebelum,
-                'sesudah' => $sesudah,
-            ]);
 
             // Kirim notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             Notification::create([
@@ -184,14 +166,6 @@ class AssignmentController extends Controller
             $assignment->delete();
 
             // Catat log audit
-            AuditLog::create([
-                'user_id' => Auth::id(),
-                'aksi' => 'delete',
-                'objek' => 'Assignment',
-                'objek_id' => $assignment->id,
-                'sebelum' => $sebelum,
-                'sesudah' => null,
-            ]);
 
             // Kirim notifikasi ke pegawai yang penugasannya dihapus (PRD Bagian 8.6)
             Notification::create([
