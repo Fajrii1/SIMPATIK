@@ -50,6 +50,7 @@ export const ActivitiesPage: React.FC = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [completingActivity, setCompletingActivity] = useState<Activity | null>(null);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
 
   // Form Penugasan + Preview State
@@ -193,6 +194,19 @@ export const ActivitiesPage: React.FC = () => {
       fetchActivities();
     } catch (err: unknown) {
       setPageError(getApiErrorMessage(err, 'Gagal memperbarui status kegiatan.'));
+    }
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!completingActivity) return;
+    setPageError('');
+    try {
+      await api.patch(`/activities/${completingActivity.id}/complete`);
+      setCompletingActivity(null);
+      fetchActivities();
+    } catch (err: unknown) {
+      setPageError(getApiErrorMessage(err, 'Gagal memperbarui status kegiatan.'));
+      setCompletingActivity(null);
     }
   };
 
@@ -578,7 +592,7 @@ export const ActivitiesPage: React.FC = () => {
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleToggleComplete(act)}
+                            onClick={() => setCompletingActivity(act)}
                             className="p-1.5 text-emerald-600 hover:text-emerald-700 rounded transition"
                             title="Selesaikan Kegiatan"
                           >
@@ -636,7 +650,7 @@ export const ActivitiesPage: React.FC = () => {
                         </button>
                       )}
                       <button
-                        onClick={() => handleToggleComplete(act)}
+                        onClick={() => act.status === 'Selesai' ? handleToggleComplete(act) : setCompletingActivity(act)}
                         className={`p-2 min-h-[36px] min-w-[36px] ${act.status === 'Selesai' ? 'text-amber-600' : 'text-emerald-600'}`}
                       >
                         {act.status === 'Selesai' ? <RotateCcw className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -1002,6 +1016,42 @@ export const ActivitiesPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {completingActivity && (
+        <div className="fixed inset-0 bg-bps/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h3 className="text-base font-bold text-slate-900">Selesaikan Kegiatan</h3>
+              <button
+                type="button"
+                onClick={() => setCompletingActivity(null)}
+                aria-label="Tutup"
+                className="text-slate-400 hover:text-slate-600 p-1.5 -mr-1.5 -mt-1 flex items-center justify-center min-h-[36px] min-w-[36px]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-600">
+              Yakin menandai kegiatan <strong>{completingActivity.nama}</strong> sebagai selesai?
+            </p>
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                type="button"
+                onClick={() => setCompletingActivity(null)}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition min-h-[44px]"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmComplete}
+                className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-xs transition min-h-[44px]"
+              >
+                Selesaikan
+              </button>
+            </div>
           </div>
         </div>
       )}
