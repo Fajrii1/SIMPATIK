@@ -470,8 +470,8 @@ class WorkloadServiceContractTest extends TestCase
     /**
      * Endpoint detail beban kerja mengembalikan angka bulan yang sama dengan service.
      *
-     * Bila endpoint gagal, pengujian ditandai belum lengkap dan temuan dilaporkan
-     * pada laporan Fase 3 tanpa diperbaiki karena fase ini hanya menambah pengujian.
+     * Endpoint sudah terbukti mengembalikan HTTP 200, sehingga penanda incomplete
+     * pada temuan Fase 3 dihapus dan diganti assertion biasa.
      */
     public function test_user_detail_endpoint_matches_workload_service(): void
     {
@@ -487,19 +487,6 @@ class WorkloadServiceContractTest extends TestCase
 
         Sanctum::actingAs($this->admin);
         $response = $this->getJson("/api/workload/users/{$user->id}?from={$month}&to={$month}");
-
-        if ($response->status() >= 500) {
-            $reason = $response->exception
-                ? $response->exception->getMessage()
-                : substr((string) $response->getContent(), 0, 200);
-
-            $this->markTestIncomplete(
-                'GET /api/workload/users/{id} gagal 500 dengan pesan "'.$reason.'". '
-                .'Temuan Fase 3: WorkloadController::userDetail membaca ->value pada activity->jenis '
-                .'dan assignment->satuan yang bertipe string. Tidak diperbaiki karena Fase 3 hanya '
-                .'menambah pengujian; rincian ada pada laporan Fase 3.'
-            );
-        }
 
         $response->assertOk();
 

@@ -15,8 +15,6 @@ import {
   FileSpreadsheet,
   Menu,
   X,
-  PanelLeftClose,
-  PanelLeftOpen,
   User as UserIcon,
 } from "lucide-react";
 import api from "../services/api";
@@ -262,7 +260,19 @@ export const MainLayout: React.FC = () => {
         className={`fixed lg:static top-0 bottom-0 left-0 z-50 ${sidebarWidth} bg-bps text-slate-100 flex flex-col border-r border-white/10 transform transition-all duration-300 ease-in-out ${
           drawerOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
-        onClick={toggleCollapsed}
+        onClick={(event) => {
+          // Klik area kosong sidebar (desktop) untuk toggle, tetapi klik tautan,
+          // tombol, atau kontrol di dalamnya tidak boleh ikut men-toggle.
+          if (window.matchMedia("(min-width: 1024px)").matches === false) {
+            return;
+          }
+
+          if ((event.target as HTMLElement).closest('a,button,input,select,textarea,[role="button"]')) {
+            return;
+          }
+
+          toggleCollapsed();
+        }}
       >
         {sidebarContent(drawerOpen ? false : collapsed)}
       </aside>
@@ -281,7 +291,6 @@ export const MainLayout: React.FC = () => {
               <Menu className="w-6 h-6" />
             </button>
 
-            {/* Chevron toggle sidebar (desktop only) - hanya muncul saat collapse */}
             {/* Tombol hamburger toggle sidebar (desktop only) */}
             <button
               type="button"

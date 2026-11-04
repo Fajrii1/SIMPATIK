@@ -353,7 +353,7 @@ export const DashboardPage: React.FC = () => {
                     <th className="py-3 px-4">Tim</th>
                     <th className="py-3 px-4">Peran</th>
                     <th className="py-3 px-4">Periode</th>
-                    <th className="py-3 px-4">Beban</th>
+                    <th className="py-3 px-4">Total poin</th>
                     <th className="py-3 px-4">Status</th>
                   </tr>
                 </thead>
@@ -393,7 +393,7 @@ export const DashboardPage: React.FC = () => {
                     <p><span className="text-slate-400">Periode:</span> {item.mulai} s.d. {item.selesai}</p>
                   </div>
                   <div className="pt-2 border-t border-slate-200/60 flex justify-between items-center text-xs">
-                    <span className="text-slate-500 font-medium">Beban Tugas:</span>
+                    <span className="text-slate-500 font-medium">Total poin:</span>
                     <span className="font-bold text-sky-700">{item.poin} poin</span>
                   </div>
                 </div>

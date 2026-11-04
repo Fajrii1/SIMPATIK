@@ -242,3 +242,16 @@ Berikut daftar penyimpangan disengaja dari `PRD.md` yang telah diterapkan dalam 
 | 7 | Palet dan identitas visual | Tidak disebut secara eksplisit di PRD. | Warna gelap dasar memakai token `bps` (#002b6a) dan warna aksi tetap sky. Tidak ada slate gelap atau navy lain untuk latar. | Persetujuan pemilik proyek (PRD bagian 11). |
 | 8 | Tenggat kendala vs minggu mulai | PRD 8.5 tidak secara eksplisit melarang tenggat sebelum minggu mulai. | Tenggat tidak dipaksa berada sesudah minggu mulai (karena konsep jatuh tempo). | PRD mengandalkan konsep jatuh tempo, bukan keterkaitan tanggal. |
 | 9 | Notifikasi kegiatan besar bersamaan | Peringatan tingkat kantor (kegiatan besar bersamaan) tidak disebutkan penerimanya di PRD. | Tidak memicu notifikasi `peringatan_jadwal` untuk kegiatan besar bersamaan. | Tidak ada pegawai sebagai subjek notifikasi. |
+
+---
+
+## 16. Stabilisasi Pasca-Implementasi
+
+- **Konteks:** Peninjauan pasca-Fase 7 menemukan poin agenda dashboard selalu 0, detail beban kerja melewatkan penugasan yang membentang melewati jendela, edit kegiatan tidak menghitung ulang peringatan, dan riwayat kendala belum menampilkan field yang berubah.
+- **Keputusan:**
+  1. **Penugasan dari Kegiatan Terhapus:** Detail beban kerja memakai irisan periode efektif `COALESCE(assignments.mulai, activities.mulai)` sampai `COALESCE(assignments.selesai, activities.selesai)` dengan jendela `from`-`to`. Penugasan yang kegiatan induknya di-soft-delete tidak ditampilkan dan tidak menyebabkan error, konsisten dengan `WorkloadService`. Perilaku soft delete kegiatan tidak diubah.
+  2. **Poin Agenda Dashboard:** Nilai `poin` pada `penugasan_aktif` dihitung sebagai `volume x bobot` kegiatan (dibulatkan 2 desimal), sama dengan `AssignmentResource` dan `poin_total` pada detail beban kerja. Kolom/accessor `poin_beban` tidak pernah ada dan tidak dipakai lagi.
+  3. **Peringatan Saat Edit Kegiatan:** Perubahan tanggal mulai, tanggal selesai, atau bobot menghitung peringatan sebelum dan sesudah untuk seluruh pegawai yang ditugaskan, pada bulan gabungan periode lama dan baru, lalu memanggil `WorkloadReminderService::notifyNewWarnings`. Perubahan nama, jenis, atau keterangan saja tidak menghitung peringatan. Dedupe notifikasi tetap berlaku.
+  4. **Riwayat Kendala Menampilkan Perubahan Field:** Setiap entri riwayat memuat `perubahan` berisi `{field, label, lama, baru}` untuk kendala, solusi, tindak lanjut, PIC, kegiatan, tenggat, status, dan catatan penutupan yang benar-benar berbeda. Nama pengguna dan nama kegiatan ditampilkan sebagai nilai, bukan ID. Field lama (`status_lama`, `status_baru`, `catatan`) tetap dipertahankan.
+  5. **Klik Area Kosong Sidebar:** Klik pada area kosong sidebar untuk memperkecil dan memperbesar adalah fitur yang disengaja. Klik pada tautan, tombol, input, atau kontrol lain di dalam sidebar tidak memicu toggle. Tombol hamburger di header tetap menjadi jalur keyboard dengan `aria-label` dan `aria-expanded`.
+- **Alasan:** Menyamakan angka antartampilan, menghindari error dan data hantu pada detail beban kerja, menjaga peringatan tetap relevan setelah jadwal berubah, serta membuat riwayat kendala dapat dibaca tanpa mengubah alur status yang ada.

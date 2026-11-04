@@ -193,3 +193,10 @@ Lihat `docs/HAK_AKSES.md` untuk tabel lengkap hak akses admin, pimpinan, ketua t
 ### 5.5 Daftar penyimpangan PRD sengaja (dari docs/CATATAN_KEPUTUSAN.md bagian 15)
 
 Lihat `docs/CATATAN_KEPUTUSAN.md` bagian 15 untuk tabel 9 penyimpangan disengaja yang telah diterapkan.
+
+## Pembaruan
+
+Bagian ini ditambahkan setelah stabilisasi pasca-implementasi. Riwayat di atas tidak ditulis ulang.
+
+- **Error 500 pada detail beban kerja sudah tidak terjadi sejak Fase 6.** Bukti: `tests/Feature/WorkloadServiceContractTest.php::test_user_detail_endpoint_matches_workload_service` berjalan tanpa penanda incomplete dan lulus dengan `assertOk()` pada `GET /api/workload/users/{id}`. Penanda `markTestIncomplete` untuk kasus 500 dihapus karena endpoint terbukti mengembalikan HTTP 200.
+- **Defek `poin_beban` diperbaiki pada pekerjaan ini.** `DashboardController::penugasan_aktif` kini menghitung poin sebagai `volume × bobot` kegiatan (dibulatkan 2 desimal), bukan lagi membaca kolom/accessor yang tidak ada. Bukti: `tests/Feature/StabilizationRegressionTest.php::test_dashboard_active_assignment_points_equal_volume_times_weight` memastikan nilai bukan 0 dan sama dengan `volume × bobot`.

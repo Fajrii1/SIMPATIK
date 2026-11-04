@@ -147,17 +147,23 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
-        $data['penugasan_aktif'] = $myAssignments->map(fn ($as) => [
-            'id' => $as->id,
-            'kegiatan_id' => $as->activity_id,
-            'kegiatan' => $as->activity->nama,
-            'tim' => $as->activity->team->nama,
-            'peran' => $as->peran,
-            'mulai' => $as->getEffectiveMulai()->toDateString(),
-            'selesai' => $as->getEffectiveSelesai()->toDateString(),
-            'poin' => (float) $as->poin_beban,
-            'status_kegiatan' => $as->activity->status,
-        ]);
+        $data['penugasan_aktif'] = $myAssignments->map(function ($as) {
+            $bobot = (float) ($as->activity?->bobot ?? 1.00);
+
+            return [
+                'id' => $as->id,
+                'kegiatan_id' => $as->activity_id,
+                'kegiatan' => $as->activity?->nama,
+                'tim' => $as->activity?->team?->nama,
+                'peran' => $as->peran,
+                'mulai' => $as->getEffectiveMulai()?->toDateString(),
+                'selesai' => $as->getEffectiveSelesai()?->toDateString(),
+                // Poin penugasan = volume x bobot kegiatan, sama dengan AssignmentResource
+                // dan poin_total pada WorkloadController::userDetail.
+                'poin' => round((float) $as->volume * $bobot, 2),
+                'status_kegiatan' => $as->activity?->status,
+            ];
+        });
 
         // 4. NOTIFIKASI BELUM DIBACA
         $unreadCount = Notification::where('user_id', $user->id)->unread()->count();

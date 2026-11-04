@@ -83,6 +83,13 @@ export interface WeeklyIssue {
   history?: WeeklyIssueHistory[];
 }
 
+export interface WeeklyIssueHistoryChange {
+  field: string;
+  label: string;
+  lama: string | null;
+  baru: string | null;
+}
+
 export interface WeeklyIssueHistory {
   id: number;
   waktu: string;
@@ -91,6 +98,7 @@ export interface WeeklyIssueHistory {
   status_lama: string | null;
   status_baru: string | null;
   catatan?: string | null;
+  perubahan?: WeeklyIssueHistoryChange[];
 }
 
 export interface NotificationItem {

@@ -191,6 +191,24 @@ class ActivityController extends Controller
             $sebelum = $activity->toArray();
             $oldMulai = $activity->mulai?->format('Y-m-d');
             $oldSelesai = $activity->selesai?->format('Y-m-d');
+            $oldBobot = (float) $activity->bobot;
+
+            $assignedUserIds = $activity->assignments()
+                ->pluck('user_id')
+                ->unique()
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+
+            // Bulan gabungan periode lama dan baru dipakai untuk menghitung peringatan
+            // sebelum dan sesudah perubahan disimpan.
+            $candidateMulai = array_key_exists('mulai', $validated) ? $validated['mulai'] : $oldMulai;
+            $candidateSelesai = array_key_exists('selesai', $validated) ? $validated['selesai'] : $oldSelesai;
+            $monthsForReminder = array_values(array_unique(array_merge(
+                $this->workloadReminder->monthsBetween($oldMulai, $oldSelesai),
+                $this->workloadReminder->monthsBetween($candidateMulai, $candidateSelesai)
+            )));
+            $beforeWarnings = $this->workloadReminder->collectWarnings($assignedUserIds, $monthsForReminder);
 
             $activity->update($validated);
             $sesudah = $activity->fresh()->toArray();
@@ -208,9 +226,10 @@ class ActivityController extends Controller
             // Jika jadwal berubah, beri notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             $newMulai = $activity->mulai?->format('Y-m-d');
             $newSelesai = $activity->selesai?->format('Y-m-d');
+            $newBobot = (float) $activity->bobot;
+            $scheduleChanged = $oldMulai !== $newMulai || $oldSelesai !== $newSelesai;
 
-            if ($oldMulai !== $newMulai || $oldSelesai !== $newSelesai) {
-                $assignedUserIds = $activity->assignments()->pluck('user_id')->unique();
+            if ($scheduleChanged) {
                 foreach ($assignedUserIds as $userId) {
                     Notification::create([
                         'user_id' => $userId,
@@ -219,6 +238,15 @@ class ActivityController extends Controller
                         'tautan' => "/kegiatan/{$activity->id}",
                     ]);
                 }
+            }
+
+            // Perubahan tanggal atau bobot dapat memunculkan peringatan beban/menumpuk baru.
+            if ($scheduleChanged || abs($oldBobot - $newBobot) > 0.0001) {
+                $this->workloadReminder->notifyNewWarnings(
+                    $assignedUserIds,
+                    $monthsForReminder,
+                    $beforeWarnings
+                );
             }
 
             return $activity;

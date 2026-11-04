@@ -158,51 +158,51 @@ class WorkloadController extends Controller
             $currentCursor->addMonth();
         }
 
-        // Ambil penugasan aktif atau penugasan di rentang periode
+        // Ambil penugasan berdasarkan irisan periode efektif dengan jendela.
+        // Periode efektif = COALESCE(assignments.mulai, activities.mulai) sampai
+        // COALESCE(assignments.selesai, activities.selesai).
+        // whereHas('activity') otomatis mengecualikan kegiatan yang di-soft-delete,
+        // konsisten dengan WorkloadService.
         $assignments = $targetUser->assignments()
             ->with(['activity.team'])
-            ->where(function ($q) use ($start, $end) {
-                $q->where(function ($sub) use ($start, $end) {
-                    $sub->whereNotNull('assignments.mulai')
-                        ->whereBetween('assignments.mulai', [$start->toDateString(), $end->toDateString()]);
-                })
-                    ->orWhere(function ($sub) use ($start, $end) {
-                        $sub->whereNotNull('assignments.selesai')
-                            ->whereBetween('assignments.selesai', [$start->toDateString(), $end->toDateString()]);
-                    })
-                    ->orWhere(function ($sub) use ($start, $end) {
-                        $sub->whereNull('assignments.mulai')
-                            ->whereHas('activity', fn ($act) => $act->whereBetween('mulai', [$start->toDateString(), $end->toDateString()]));
-                    })
-                    ->orWhere(function ($sub) use ($start, $end) {
-                        $sub->whereNull('assignments.selesai')
-                            ->whereHas('activity', fn ($act) => $act->whereBetween('selesai', [$start->toDateString(), $end->toDateString()]));
-                    });
+            ->whereHas('activity', function ($q) use ($start, $end) {
+                $q->whereRaw(
+                    'COALESCE(assignments.mulai, activities.mulai) <= ?',
+                    [$end->toDateString()]
+                )->whereRaw(
+                    'COALESCE(assignments.selesai, activities.selesai) >= ?',
+                    [$start->toDateString()]
+                );
             })
-            ->get();
+            ->get()
+            // Lewati baris tanpa kegiatan agar tidak memicu error saat dipetakan.
+            ->filter(fn ($assignment) => $assignment->activity !== null)
+            ->values();
 
         $viewer = $currentUser;
 
         $assignmentDetails = $assignments->map(function ($assignment) use ($viewer) {
-            $canViewMetrics = AssignmentVisibility::canViewMetrics($viewer, $assignment, (int) $assignment->activity->team_id);
+            $activity = $assignment->activity;
+            $jenis = $activity->jenis instanceof \BackedEnum ? $activity->jenis->value : (string) $activity->jenis;
+            $canViewMetrics = AssignmentVisibility::canViewMetrics($viewer, $assignment, (int) $activity->team_id);
 
             return [
                 'id' => $assignment->id,
                 'activity_id' => $assignment->activity_id,
-                'kegiatan' => $assignment->activity->nama,
-                'jenis_kegiatan' => (string) $assignment->activity->jenis,
-                'tim' => $assignment->activity->team->nama,
+                'kegiatan' => $activity->nama,
+                'jenis_kegiatan' => $jenis,
+                'tim' => $activity->team?->nama,
                 'peran' => $assignment->peran,
                 'volume' => $canViewMetrics ? (float) $assignment->volume : null,
                 'satuan' => $canViewMetrics ? (string) $assignment->satuan : null,
-                'bobot' => (float) $assignment->activity->bobot,
+                'bobot' => (float) $activity->bobot,
                 'poin_total' => $canViewMetrics
-                    ? round((float) $assignment->volume * (float) ($assignment->activity->bobot ?? 1.00), 2)
+                    ? round((float) $assignment->volume * (float) ($activity->bobot ?? 1.00), 2)
                     : null,
                 'metrics_visible' => $canViewMetrics,
-                'tanggal_mulai' => $assignment->getEffectiveMulai()->toDateString(),
-                'tanggal_selesai' => $assignment->getEffectiveSelesai()->toDateString(),
-                'status_kegiatan' => $assignment->activity->status,
+                'tanggal_mulai' => $assignment->getEffectiveMulai()?->toDateString(),
+                'tanggal_selesai' => $assignment->getEffectiveSelesai()?->toDateString(),
+                'status_kegiatan' => $activity->status,
             ];
         });
 

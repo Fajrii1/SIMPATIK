@@ -72,16 +72,16 @@ Di luar production, akun baru dibuat dengan kata sandi pengembangan `password` d
 
 ## Role dan Hak Akses (ringkas)
 
-| Fitur | Admin | Ketua Tim | Pegawai | Pimpinan |
+| Fitur | Admin | Pimpinan | Ketua Tim (timnya) | Pegawai |
 |---|---|---|---|---|
-| Kelola pengguna/tim | Ya | Tidak | Tidak | Tidak |
-| Tambah/edit kegiatan | Semua tim | Tim yang dipimpin | Tidak | Tidak |
-| Ekspor rekap | Ya | Tim yang dipimpin | Tidak | Ya |
-| Lihat kalender | Semua tim | Semua tim | Semua tim (lihat) | Semua tim |
-| Lihat beban kerja | Semua | Semua | Hanya miliknya | Semua |
-| Laporan kendala | Ya | Timnya | Bila pengaturan mengizinkan (timnya) | Tidak |
+| Kelola pengguna, tim, anggota, ketua tim | Ya | Tidak | Tidak | Tidak |
+| Tambah/edit kegiatan | Semua tim | Tidak | Tim yang dipimpin | Tidak |
+| Lihat kalender | Semua tim | Semua tim | Semua tim | Semua tim (lihat) |
+| Lihat beban kerja | Semua pegawai | Semua pegawai | Anggota timnya | Hanya miliknya |
+| Isi dan ubah kendala | Ya | Tidak | Timnya | Bila pengaturan mengizinkan (miliknya/timnya) |
+| Ekspor rekap (beban, kegiatan, kendala) | Ya | Ya | Timnya | Tidak |
 
-Hak akses dicek di backend; frontend hanya menyesuaikan tampilan.
+Hak akses dicek di backend; frontend hanya menyesuaikan tampilan. Rujukan utama dan paling rinci adalah `docs/HAK_AKSES.md`.
 
 Catatan: "Ketua Tim" bukan peran tersendiri, melainkan pegawai atau pimpinan yang tercatat sebagai `teams.ketua_id`.
 

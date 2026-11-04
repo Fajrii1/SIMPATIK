@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateWeeklyIssueStatusRequest;
 use App\Http\Requests\WeeklyIssueRequest;
 use App\Http\Resources\WeeklyIssueResource;
+use App\Models\Activity;
 use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Models\User;
@@ -15,6 +16,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 
 class WeeklyIssueController extends Controller
 {
@@ -402,7 +404,35 @@ class WeeklyIssueController extends Controller
             ->orderBy('id', 'asc')
             ->get();
 
-        return $logs->map(function (AuditLog $log) {
+        $picIds = $logs
+            ->flatMap(fn (AuditLog $log) => [
+                $this->historyRawValue($log->sebelum, 'pic_id'),
+                $this->historyRawValue($log->sesudah, 'pic_id'),
+            ])
+            ->filter(fn ($id) => $id !== null && $id !== '')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $activityIds = $logs
+            ->flatMap(fn (AuditLog $log) => [
+                $this->historyRawValue($log->sebelum, 'activity_id'),
+                $this->historyRawValue($log->sesudah, 'activity_id'),
+            ])
+            ->filter(fn ($id) => $id !== null && $id !== '')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $userNames = $picIds->isEmpty()
+            ? collect()
+            : User::whereIn('id', $picIds)->pluck('nama', 'id');
+
+        $activityNames = $activityIds->isEmpty()
+            ? collect()
+            : Activity::withTrashed()->whereIn('id', $activityIds)->pluck('nama', 'id');
+
+        return $logs->map(function (AuditLog $log) use ($userNames, $activityNames) {
             $before = is_array($log->sebelum) ? $log->sebelum : [];
             $after = is_array($log->sesudah) ? $log->sesudah : [];
 
@@ -414,7 +444,104 @@ class WeeklyIssueController extends Controller
                 'status_lama' => $before['status'] ?? null,
                 'status_baru' => $after['status'] ?? null,
                 'catatan' => $after['catatan_penutupan'] ?? null,
+                'perubahan' => $this->historyChanges($before, $after, $userNames, $activityNames),
             ];
         })->values()->all();
+    }
+
+    /**
+     * Susun daftar field yang berubah antara snapshot sebelum dan sesudah.
+     *
+     * Hanya kunci penting yang dibandingkan. Entri tanpa snapshot sebelumnya
+     * (misalnya pencatatan kendala baru) tidak dianggap sebagai perubahan field.
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     * @param  Collection<int, string>  $userNames
+     * @param  Collection<int, string>  $activityNames
+     * @return array<int, array{field: string, label: string, lama: mixed, baru: mixed}>
+     */
+    private function historyChanges(array $before, array $after, $userNames, $activityNames): array
+    {
+        if ($before === []) {
+            return [];
+        }
+
+        $labels = [
+            'kendala' => 'Kendala',
+            'solusi' => 'Solusi',
+            'tindak_lanjut' => 'Tindak Lanjut',
+            'pic_id' => 'PIC',
+            'activity_id' => 'Kegiatan',
+            'tenggat' => 'Tenggat',
+            'status' => 'Status',
+            'catatan_penutupan' => 'Catatan Penutupan',
+        ];
+
+        $changes = [];
+
+        foreach ($labels as $field => $label) {
+            $oldValue = $this->historyDisplayValue($field, $this->historyRawValue($before, $field), $userNames, $activityNames);
+            $newValue = $this->historyDisplayValue($field, $this->historyRawValue($after, $field), $userNames, $activityNames);
+
+            if ($this->historyComparable($oldValue) === $this->historyComparable($newValue)) {
+                continue;
+            }
+
+            $changes[] = [
+                'field' => $field,
+                'label' => $label,
+                'lama' => $oldValue,
+                'baru' => $newValue,
+            ];
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function historyRawValue(mixed $snapshot, string $key): mixed
+    {
+        if (! is_array($snapshot) || ! array_key_exists($key, $snapshot)) {
+            return null;
+        }
+
+        return $snapshot[$key];
+    }
+
+    /**
+     * @param  Collection<int, string>  $userNames
+     * @param  Collection<int, string>  $activityNames
+     */
+    private function historyDisplayValue(string $field, mixed $value, $userNames, $activityNames): mixed
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($field === 'pic_id') {
+            return $userNames[(int) $value] ?? null;
+        }
+
+        if ($field === 'activity_id') {
+            return $activityNames[(int) $value] ?? null;
+        }
+
+        if ($field === 'tenggat') {
+            try {
+                return Carbon::parse($value)->toDateString();
+            } catch (\Throwable) {
+                return (string) $value;
+            }
+        }
+
+        return (string) $value;
+    }
+
+    private function historyComparable(mixed $value): string
+    {
+        return $value === null ? '' : (string) $value;
     }
 }

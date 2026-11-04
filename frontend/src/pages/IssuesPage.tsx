@@ -614,6 +614,25 @@ export const IssuesPage: React.FC = () => {
     </>
   );
 
+  const formatHistoryValue = (field: string, value: string | null) => {
+    if (!value) {
+      return '-';
+    }
+
+    if (field === 'tenggat') {
+      const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+      if (match) {
+        return `${match[3]}/${match[2]}/${match[1]}`;
+      }
+    }
+
+    if (field === 'status') {
+      return statusLabel(value);
+    }
+
+    return value;
+  };
+
   const renderHistory = (history?: WeeklyIssueHistory[]) => {
     if (!history || history.length === 0) {
       return <p className="text-xs text-slate-500">Belum ada riwayat status.</p>;
@@ -636,6 +655,16 @@ export const IssuesPage: React.FC = () => {
               <p className="text-xs text-slate-600 mt-0.5">
                 {statusLabel(entry.status_lama)} → {statusLabel(entry.status_baru)}
               </p>
+            )}
+            {entry.perubahan && entry.perubahan.length > 0 && (
+              <ul className="mt-1 space-y-0.5">
+                {entry.perubahan.map((change) => (
+                  <li key={change.field} className="text-xs text-slate-600">
+                    {change.label}: {formatHistoryValue(change.field, change.lama)} →{' '}
+                    {formatHistoryValue(change.field, change.baru)}
+                  </li>
+                ))}
+              </ul>
             )}
             {entry.catatan && (
               <p className="text-xs text-slate-600 mt-0.5">Catatan: {entry.catatan}</p>
