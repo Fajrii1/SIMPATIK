@@ -673,8 +673,8 @@ export const ActivitiesPage: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Volume Pekerjaan</label>
                 <input
                   type="number"
-                  step="0.1"
-                  min="0.1"
+                  step="any"
+                  min="0.01"
                   required
                   value={assignmentForm.volume}
                   onChange={(e) => setAssignmentForm({ ...assignmentForm, volume: parseFloat(e.target.value) || 0 })}

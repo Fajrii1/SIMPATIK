@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -107,6 +107,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [candidates, setCandidates] = useState<User[]>([]);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Pratinjau batch
   const [preview, setPreview] = useState<PreviewBatchResponse | null>(null);
@@ -277,6 +278,15 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     rows.length > 0 &&
     rows.some((row) => Number(row.volume) > 0);
 
+  // Baris PJ ditampilkan sebagai "Penanggung Jawab" tanpa mengubah peran default baris.
+  // Peran efektif inilah yang harus dikirim ke backend, bukan row.peran mentah.
+  const effectivePeran = (row: AssignmentRow) =>
+    row.user_id === Number(pjId)
+      ? PJ_ROLE
+      : row.peran === 'Lainnya'
+        ? row.peranLainnya.trim()
+        : row.peran;
+
   const previewPayload = () => ({
     team_id: Number(formData.team_id),
     mulai: formData.mulai,
@@ -286,7 +296,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       .filter((row) => row.volume.trim() !== '' && Number(row.volume) > 0)
       .map((row) => ({
         user_id: row.user_id,
-        peran: row.peran === PJ_ROLE ? PJ_ROLE : row.peran === 'Lainnya' ? row.peranLainnya.trim() : row.peran,
+        peran: effectivePeran(row),
         volume: Number(row.volume),
         satuan: row.satuan,
         mulai: row.mulai || undefined,
@@ -329,6 +339,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     rows,
     basicValidForPreview,
   ]);
+
+  // Pastikan pesan kesalahan terlihat, walau pengguna sedang berada di bagian bawah modal.
+  useEffect(() => {
+    if (formErrors.length > 0) {
+      modalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [formErrors]);
 
   const previewByUser = useMemo(() => {
     const map = new Map<number, PreviewBatchPegawaiResult>();
@@ -444,7 +461,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       } else {
         const assignments = rows.map((row) => ({
           user_id: row.user_id,
-          peran: row.peran === PJ_ROLE ? PJ_ROLE : row.peran === 'Lainnya' ? row.peranLainnya.trim() : row.peran,
+          peran: effectivePeran(row),
           volume: Number(row.volume),
           satuan: row.satuan,
           ...(row.mulai ? { mulai: row.mulai } : {}),
@@ -469,10 +486,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-bps/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-4xl w-full p-5 sm:p-6 max-h-[92vh] overflow-y-auto">
+      <div
+        ref={modalRef}
+        className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-4xl w-full p-5 sm:p-6 max-h-[92vh] overflow-y-auto"
+      >
         <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">{title}</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
           {formErrors.length > 0 && (
             <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 space-y-1">
               {formErrors.map((message, index) => (
@@ -675,6 +695,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                         <button
                           key={candidate.id}
                           type="button"
+                          // Cegah input kehilangan fokus sebelum onClick sempat berjalan.
+                          onMouseDown={(event) => event.preventDefault()}
                           onClick={() => addMember(candidate.id)}
                           className="block w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
                         >
@@ -810,7 +832,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                                 <input
                                   type="number"
                                   min="0.01"
-                                  step="0.1"
+                                  step="any"
                                   aria-label={`Volume ${candidate?.nama}`}
                                   value={row.volume}
                                   onChange={(e) => updateRow(row.key, { volume: e.target.value })}
