@@ -9,6 +9,7 @@ import {
   Eye,
   Pencil,
   Trash2,
+  Settings2,
 } from 'lucide-react';
 import { WeeklyIssue, WeeklyIssueHistory, Team, Activity, User } from '../types';
 import { getApiErrorMessage } from '../services/errors';
@@ -837,9 +838,9 @@ export const IssuesPage: React.FC = () => {
                         {canManageIssue(item) && (
                           <button
                             onClick={() => openStatusModal(item)}
-                            className="text-xs text-sky-600 hover:text-sky-700 font-semibold"
+                            className="inline-flex items-center gap-1 text-xs text-sky-600 hover:text-sky-700 font-semibold"
                           >
-                            Kelola
+                            <Settings2 className="w-3.5 h-3.5" /> Kelola
                           </button>
                         )}
                         {canDeleteIssue(item) && (
