@@ -70,7 +70,7 @@ class DashboardController extends Controller
             $kegiatanBerjalan = $activities->filter(fn ($a) => $a->status === 'Berjalan')->count();
             $kegiatanSelesai = $activities->filter(fn ($a) => $a->status === 'Selesai')->count();
             $kegiatanTerlambat = $activities->filter(fn ($a) => $a->status === 'Terlambat')->count();
-            $kegiatanMendatang = $activities->filter(fn ($a) => $a->status === 'Belum Mulai')->count();
+            $kegiatanMendatang = $activities->filter(fn ($a) => $a->status === 'Belum mulai')->count();
 
             // Peringatan beban kerja
             $warnings = $this->workloadService->getMonthlyWarnings($currentMonth);
