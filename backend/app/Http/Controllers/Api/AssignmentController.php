@@ -12,6 +12,7 @@ use App\Models\Activity;
 use App\Models\Assignment;
 use App\Models\AuditLog;
 use App\Models\Notification;
+use App\Models\User;
 use App\Services\WorkloadReminderService;
 use App\Services\WorkloadService;
 use Carbon\Carbon;
@@ -206,6 +207,22 @@ class AssignmentController extends Controller
         return response()->json([
             'message' => 'Penugasan berhasil dihapus.',
         ]);
+    }
+
+    /**
+     * Menampilkan daftar pegawai aktif yang dapat ditugaskan pada suatu kegiatan.
+     * Sumbernya seluruh pegawai pada sistem, bukan hanya anggota tim kegiatan tersebut.
+     */
+    public function candidates(Activity $activity): JsonResponse
+    {
+        $this->authorize('create', [Assignment::class, $activity]);
+
+        $users = User::query()
+            ->where('aktif', true)
+            ->orderBy('nama')
+            ->get(['id', 'nama', 'nip', 'jabatan']);
+
+        return response()->json(['data' => $users]);
     }
 
     /**

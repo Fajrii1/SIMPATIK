@@ -262,12 +262,12 @@ class ScheduledIssuesAndExportTest extends TestCase
 
         Sanctum::actingAs($this->admin);
 
-        $this->postJson("/api/activities/{$activity->id}/assignments", [
+        $assignmentId = $this->postJson("/api/activities/{$activity->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
             'volume' => 50,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
-        ])->assertCreated();
+        ])->assertCreated()->json('data.id');
 
         // Ketua tim menerima peringatan beban baru untuk pegawaiA pada 2034-01.
         $this->assertReminderNotification(
@@ -283,13 +283,12 @@ class ScheduledIssuesAndExportTest extends TestCase
             0
         );
 
-        // Perubahan berikutnya yang tidak menambah beban baru tidak membuat notifikasi baru.
-        $this->postJson("/api/activities/{$activity->id}/assignments", [
-            'user_id' => $this->pegawaiA->id,
+        // Perubahan berikutnya yang tidak memunculkan peringatan baru tidak membuat notifikasi baru.
+        // Penugasan yang sama diperbarui (bukan ditambah) agar tidak membuat data duplikat.
+        $this->putJson("/api/assignments/{$assignmentId}", [
             'peran' => 'Pengawas',
-            'volume' => 1,
-            'satuan' => SatuanPenugasan::RESPONDEN->value,
-        ])->assertCreated();
+            'volume' => 51,
+        ])->assertOk();
 
         $this->assertReminderNotification(
             $this->ketuaA->id,

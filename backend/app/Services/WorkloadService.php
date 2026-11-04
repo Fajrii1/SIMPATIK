@@ -376,6 +376,35 @@ class WorkloadService
         // Distribusi poin rencana penugasan
         $simulatedDistribution = $this->calculateAssignmentMonthlyPoints($volume, $bobot, $mulai, $selesai);
 
+        // Pada mode edit, hitung kontribusi penugasan lama agar pratinjau menggambarkan
+        // penggantian penugasan (bukan penambahan) dan tidak menghitung dua kali.
+        $oldAssignment = null;
+        $oldDistribution = [];
+
+        if ($excludeAssignmentId !== null) {
+            $oldAssignment = Assignment::query()
+                ->with('activity')
+                ->where('user_id', $userId)
+                ->find($excludeAssignmentId);
+
+            if ($oldAssignment && $oldAssignment->activity) {
+                $oldActivity = $oldAssignment->activity;
+                $oldStart = $oldAssignment->mulai
+                    ? Carbon::parse($oldAssignment->mulai)->startOfDay()
+                    : Carbon::parse($oldActivity->mulai)->startOfDay();
+                $oldEnd = $oldAssignment->selesai
+                    ? Carbon::parse($oldAssignment->selesai)->startOfDay()
+                    : Carbon::parse($oldActivity->selesai)->startOfDay();
+
+                $oldDistribution = $this->calculateAssignmentMonthlyPoints(
+                    (float) $oldAssignment->volume,
+                    (float) ($oldActivity->bobot ?? 1.00),
+                    $oldStart,
+                    $oldEnd
+                );
+            }
+        }
+
         $ambangBeban = (float) Setting::getVal('ambang_beban_bulanan', 100);
         $maksPenugasan = (int) Setting::getVal('maks_penugasan_bersamaan', 3);
 
@@ -383,15 +412,25 @@ class WorkloadService
         $warnings = [];
         $hasExceededThreshold = false;
 
-        foreach ($simulatedDistribution as $month => $additionalPoints) {
+        // Gabungkan bulan dari rencana baru dan penugasan lama yang sedang diedit,
+        // sehingga perubahan periode juga terlihat dampaknya pada bulan lama.
+        $months = array_keys($simulatedDistribution + $oldDistribution);
+        sort($months);
+
+        foreach ($months as $month) {
             $monthDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
             $monthStart = $monthDate->copy()->startOfMonth();
             $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
 
-            $currentWorkload = $this->calculateMonthlyWorkloadForUser($user, $month, $excludeAssignmentId);
+            $additionalPoints = (float) ($simulatedDistribution[$month] ?? 0);
+            $oldPoints = (float) ($oldDistribution[$month] ?? 0);
+            $deltaPoints = round($additionalPoints - $oldPoints, 2);
+
+            // Beban sebelum = beban aktual saat ini (termasuk penugasan yang sedang diedit).
+            $currentWorkload = $this->calculateMonthlyWorkloadForUser($user, $month);
 
             $bebanSebelum = $currentWorkload['beban'];
-            $bebanSesudah = round($bebanSebelum + $additionalPoints, 2);
+            $bebanSesudah = round(max(0, $bebanSebelum + $deltaPoints), 2);
 
             $persentaseSebelum = $currentWorkload['persentase'];
             $persentaseSesudah = $ambangBeban > 0 ? round(($bebanSesudah / $ambangBeban) * 100, 2) : 0.0;
@@ -438,29 +477,34 @@ class WorkloadService
             $concurrencySesudah = ! empty($dailyCounts) ? max($dailyCounts) : 1;
             $concurrencySebelum = $currentWorkload['penugasan_bersamaan_maks'];
 
-            // Jumlah total penugasan di bulan ini
-            $penugasanSesudah = $currentWorkload['jumlah_penugasan'] + 1;
+            // Jumlah total penugasan di bulan ini (ganti penugasan lama dengan penugasan baru).
+            $penugasanSesudah = $currentWorkload['jumlah_penugasan']
+                - (isset($oldDistribution[$month]) ? 1 : 0)
+                + (isset($simulatedDistribution[$month]) ? 1 : 0);
 
-            if ($bebanSesudah >= $ambangBeban) {
-                $hasExceededThreshold = true;
-                $warnings[] = [
-                    'jenis' => 'beban',
-                    'bulan' => $month,
-                    'pesan' => "Penugasan ini menyebabkan beban kerja {$user->nama} pada bulan {$month} mencapai {$bebanSesudah} poin (melebihi/mencapai ambang {$ambangBeban}).",
-                ];
-            }
+            // Peringatan hanya berlaku pada bulan yang memang terdampak oleh penugasan baru.
+            if (isset($simulatedDistribution[$month])) {
+                if ($bebanSesudah >= $ambangBeban) {
+                    $hasExceededThreshold = true;
+                    $warnings[] = [
+                        'jenis' => 'beban',
+                        'bulan' => $month,
+                        'pesan' => "Penugasan ini menyebabkan beban kerja {$user->nama} pada bulan {$month} mencapai {$bebanSesudah} poin (melebihi/mencapai ambang {$ambangBeban}).",
+                    ];
+                }
 
-            if ($concurrencySesudah >= $maksPenugasan) {
-                $warnings[] = [
-                    'jenis' => 'penugasan_bersamaan',
-                    'bulan' => $month,
-                    'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencySesudah} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
-                ];
+                if ($concurrencySesudah >= $maksPenugasan) {
+                    $warnings[] = [
+                        'jenis' => 'penugasan_bersamaan',
+                        'bulan' => $month,
+                        'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencySesudah} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
+                    ];
+                }
             }
 
             $monthlyImpacts[] = [
                 'bulan' => $month,
-                'tambahan_poin' => $additionalPoints,
+                'tambahan_poin' => $deltaPoints,
                 'beban_sebelum' => $bebanSebelum,
                 'beban_sesudah' => $bebanSesudah,
                 'persentase_sebelum' => $persentaseSebelum,

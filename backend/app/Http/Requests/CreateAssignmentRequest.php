@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\SatuanPenugasan;
 use App\Models\Activity;
 use App\Models\User;
+use App\Support\PeranPenugasan;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -66,9 +67,28 @@ class CreateAssignmentRequest extends FormRequest
                 if (! $targetUser || ! $targetUser->aktif) {
                     $validator->errors()->add('user_id', 'Pegawai yang ditugaskan harus berstatus aktif.');
                 }
+
+                $sudahDitugaskan = $activity->assignments()
+                    ->where('user_id', $this->integer('user_id'))
+                    ->exists();
+
+                if ($sudahDitugaskan) {
+                    $validator->errors()->add('user_id', 'Pegawai ini sudah ditugaskan pada kegiatan tersebut.');
+                }
             }
 
-            // 2. Validasi rentang penugasan harus berada dalam periode kegiatan (PRD Bagian 8.4)
+            // 2. Satu kegiatan hanya boleh memiliki satu Penanggung Jawab.
+            if (PeranPenugasan::isPenanggungJawab($this->input('peran'))) {
+                $punyaPj = $activity->assignments()
+                    ->where('peran', PeranPenugasan::PENANGGUNG_JAWAB)
+                    ->exists();
+
+                if ($punyaPj) {
+                    $validator->errors()->add('peran', 'Kegiatan hanya boleh memiliki satu Penanggung Jawab.');
+                }
+            }
+
+            // 3. Validasi rentang penugasan harus berada dalam periode kegiatan (PRD Bagian 8.4)
             $actMulai = Carbon::parse($activity->mulai)->startOfDay();
             $actSelesai = Carbon::parse($activity->selesai)->startOfDay();
 

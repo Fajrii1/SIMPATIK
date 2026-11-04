@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\SatuanPenugasan;
 use App\Models\Assignment;
 use App\Models\User;
+use App\Support\PeranPenugasan;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -62,6 +63,9 @@ class UpdateAssignmentRequest extends FormRequest
 
             $activity = $assignment->activity;
 
+            $newUserId = $this->has('user_id') ? $this->integer('user_id') : (int) $assignment->user_id;
+            $newPeran = $this->has('peran') ? (string) $this->input('peran') : (string) $assignment->peran;
+
             // 1. Validasi pegawai aktif
             if ($this->filled('user_id')) {
                 $targetUser = User::find($this->integer('user_id'));
@@ -70,7 +74,31 @@ class UpdateAssignmentRequest extends FormRequest
                 }
             }
 
-            // 2. Validasi rentang penugasan terhadap periode kegiatan
+            // 2. Pegawai yang sama tidak boleh memiliki dua penugasan pada kegiatan yang sama.
+            $duplikat = $activity->assignments()
+                ->where('user_id', $newUserId)
+                ->where('id', '!=', $assignment->id)
+                ->exists();
+
+            if ($duplikat) {
+                $validator->errors()->add('user_id', 'Pegawai ini sudah ditugaskan pada kegiatan tersebut.');
+            }
+
+            // 3. Jaga invariant tepat satu Penanggung Jawab per kegiatan.
+            $pjLain = $activity->assignments()
+                ->where('peran', PeranPenugasan::PENANGGUNG_JAWAB)
+                ->where('id', '!=', $assignment->id)
+                ->exists();
+
+            if (PeranPenugasan::isPenanggungJawab($newPeran) && $pjLain) {
+                $validator->errors()->add('peran', 'Kegiatan hanya boleh memiliki satu Penanggung Jawab.');
+            }
+
+            if (PeranPenugasan::isPenanggungJawab($assignment->peran) && ! PeranPenugasan::isPenanggungJawab($newPeran) && ! $pjLain) {
+                $validator->errors()->add('peran', 'Kegiatan wajib memiliki satu Penanggung Jawab.');
+            }
+
+            // 4. Validasi rentang penugasan terhadap periode kegiatan
             $actMulai = Carbon::parse($activity->mulai)->startOfDay();
             $actSelesai = Carbon::parse($activity->selesai)->startOfDay();
 

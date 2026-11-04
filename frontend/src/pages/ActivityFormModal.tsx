@@ -490,7 +490,17 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
         ref={modalRef}
         className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-4xl w-full p-5 sm:p-6 max-h-[92vh] overflow-y-auto"
       >
-        <h2 className="text-base sm:text-lg font-bold text-slate-900 mb-4">{title}</h2>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup form kegiatan"
+            className="text-slate-400 hover:text-slate-600 p-1.5 -mr-1.5 -mt-1 flex items-center justify-center min-h-[36px] min-w-[36px]"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-5">
           {formErrors.length > 0 && (

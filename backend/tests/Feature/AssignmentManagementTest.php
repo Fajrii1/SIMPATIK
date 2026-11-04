@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Notification;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\PeranPenugasan;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -20,6 +21,7 @@ class AssignmentManagementTest extends TestCase
     public function test_unauthenticated_cannot_access_assignment_endpoints(): void
     {
         $this->getJson('/api/activities/1/assignments')->assertStatus(401);
+        $this->getJson('/api/activities/1/assignment-candidates')->assertStatus(401);
         $this->postJson('/api/activities/1/assignments', [])->assertStatus(401);
         $this->getJson('/api/assignments/1')->assertStatus(401);
         $this->putJson('/api/assignments/1', [])->assertStatus(401);
@@ -252,6 +254,178 @@ class AssignmentManagementTest extends TestCase
             // Verifikasi mutlak: jumlah baris penugasan di database TIDAK berubah
             $this->assertEquals($initialAssignmentsCount, Assignment::count());
         } finally {
+            $activity->forceDelete();
+        }
+    }
+
+    /**
+     * Kandidat petugas berasal dari seluruh pegawai aktif pada sistem,
+     * bukan hanya anggota tim kegiatan tersebut.
+     */
+    public function test_assignment_candidates_lists_all_active_users(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $team = Team::first();
+
+        $activity = Activity::create([
+            'nama' => 'Kegiatan Kandidat Petugas Test',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-01',
+            'selesai' => '2026-11-30',
+            'bobot' => 1.0,
+        ]);
+
+        try {
+            Sanctum::actingAs($admin);
+
+            $response = $this->getJson("/api/activities/{$activity->id}/assignment-candidates");
+
+            $response->assertOk()
+                ->assertJsonStructure([
+                    'data' => [
+                        '*' => ['id', 'nama', 'nip', 'jabatan'],
+                    ],
+                ]);
+
+            $candidateIds = collect($response->json('data'))->pluck('id');
+            $expectedActiveIds = User::where('aktif', true)->pluck('id');
+
+            $this->assertEqualsCanonicalizing(
+                $expectedActiveIds->all(),
+                $candidateIds->all()
+            );
+        } finally {
+            $activity->forceDelete();
+        }
+    }
+
+    /**
+     * Edit penugasan memperbarui baris yang sama (bukan membuat duplikat)
+     * dan menyimpan perubahan pegawai, peran, volume, serta periode.
+     */
+    public function test_update_assignment_changes_existing_row(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $p1 = User::where('email', 'pegawai01@contoh.test')->first();
+        $p2 = User::where('email', 'pegawai02@contoh.test')->first();
+        $p3 = User::where('email', 'pegawai03@contoh.test')->first();
+        $team = Team::first();
+
+        $activity = Activity::create([
+            'nama' => 'Kegiatan Edit Penugasan Test',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-01',
+            'selesai' => '2026-11-30',
+            'bobot' => 1.0,
+        ]);
+
+        $activity->assignments()->create([
+            'user_id' => $p1->id,
+            'peran' => PeranPenugasan::PENANGGUNG_JAWAB,
+            'volume' => 5,
+            'satuan' => 'Dokumen',
+        ]);
+
+        $target = $activity->assignments()->create([
+            'user_id' => $p2->id,
+            'peran' => 'Anggota',
+            'volume' => 10,
+            'satuan' => 'Dokumen',
+        ]);
+
+        $countBefore = Assignment::where('activity_id', $activity->id)->count();
+
+        try {
+            Sanctum::actingAs($admin);
+
+            $response = $this->putJson("/api/assignments/{$target->id}", [
+                'user_id' => $p3->id,
+                'peran' => 'Pengawas',
+                'volume' => 25,
+                'satuan' => 'Blok Sensus',
+                'mulai' => '2026-11-05',
+                'selesai' => '2026-11-20',
+            ]);
+
+            $response->assertOk()
+                ->assertJsonPath('data.user_id', $p3->id)
+                ->assertJsonPath('data.peran', 'Pengawas')
+                ->assertJsonPath('data.volume', 25)
+                ->assertJsonPath('data.satuan', 'Blok Sensus');
+
+            $this->assertEquals(
+                $countBefore,
+                Assignment::where('activity_id', $activity->id)->count()
+            );
+            $this->assertDatabaseHas('assignments', [
+                'id' => $target->id,
+                'user_id' => $p3->id,
+                'peran' => 'Pengawas',
+                'volume' => 25,
+            ]);
+        } finally {
+            Assignment::where('activity_id', $activity->id)->forceDelete();
+            $activity->forceDelete();
+        }
+    }
+
+    /**
+     * Edit ditolak bila menghasilkan pegawai ganda atau lebih dari satu PJ.
+     */
+    public function test_update_assignment_rejects_duplicate_user_and_second_pj(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $p1 = User::where('email', 'pegawai01@contoh.test')->first();
+        $p2 = User::where('email', 'pegawai02@contoh.test')->first();
+        $team = Team::first();
+
+        $activity = Activity::create([
+            'nama' => 'Kegiatan Validasi Edit Test',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-01',
+            'selesai' => '2026-11-30',
+            'bobot' => 1.0,
+        ]);
+
+        $pj = $activity->assignments()->create([
+            'user_id' => $p1->id,
+            'peran' => PeranPenugasan::PENANGGUNG_JAWAB,
+            'volume' => 5,
+            'satuan' => 'Dokumen',
+        ]);
+
+        $target = $activity->assignments()->create([
+            'user_id' => $p2->id,
+            'peran' => 'Anggota',
+            'volume' => 10,
+            'satuan' => 'Dokumen',
+        ]);
+
+        try {
+            Sanctum::actingAs($admin);
+
+            // Ganti pegawai menjadi pegawai yang sudah ditugaskan (PJ).
+            $this->putJson("/api/assignments/{$target->id}", [
+                'user_id' => $p1->id,
+            ])->assertStatus(422)
+                ->assertJsonValidationErrors(['user_id']);
+
+            // Jadikan penugasan kedua sebagai PJ -> akan ada dua PJ.
+            $this->putJson("/api/assignments/{$target->id}", [
+                'peran' => PeranPenugasan::PENANGGUNG_JAWAB,
+            ])->assertStatus(422)
+                ->assertJsonValidationErrors(['peran']);
+
+            // Ubah PJ menjadi bukan PJ -> kegiatan tidak punya PJ.
+            $this->putJson("/api/assignments/{$pj->id}", [
+                'peran' => 'Anggota',
+            ])->assertStatus(422)
+                ->assertJsonValidationErrors(['peran']);
+        } finally {
+            Assignment::where('activity_id', $activity->id)->forceDelete();
             $activity->forceDelete();
         }
     }

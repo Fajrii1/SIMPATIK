@@ -155,15 +155,35 @@ export interface WorkloadWarning {
   detail?: Record<string, unknown>;
 }
 
+export interface AssignmentPreviewMonthlyImpact {
+  bulan: string;
+  tambahan_poin: number;
+  beban_sebelum: number;
+  beban_sesudah: number;
+  persentase_sebelum: number;
+  persentase_sesudah: number;
+  indikator_sebelum: string;
+  indikator_sesudah: string;
+  jumlah_penugasan_sebelum: number;
+  jumlah_penugasan_sesudah: number;
+  penugasan_bersamaan_sebelum: number;
+  penugasan_bersamaan_sesudah: number;
+}
+
 export interface AssignmentPreviewResult {
-  current_workload: number;
-  simulated_workload: number;
-  indicator_before: string;
-  indicator_after: string;
-  is_over_threshold: boolean;
-  has_concurrency_warning: boolean;
-  concurrent_assignments_peak: number;
-  points_added: number;
+  pegawai: { id: number; nama: string };
+  kegiatan: { id: number; nama: string; bobot: number; kegiatan_besar: boolean };
+  rencana: {
+    peran: string;
+    volume: number;
+    satuan: string;
+    mulai: string;
+    selesai: string;
+    total_poin: number;
+  };
+  dampak_bulanan: AssignmentPreviewMonthlyImpact[];
+  peringatan: { jenis: string; bulan: string; pesan: string }[];
+  melebihi_ambang: boolean;
 }
 
 export interface PreviewBatchImpactRow {

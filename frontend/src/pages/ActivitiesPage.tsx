@@ -18,14 +18,22 @@ import { Activity, Team, User, Assignment, AssignmentPreviewResult } from '../ty
 import { getApiErrorMessage } from '../services/errors';
 import { ActivityFormModal } from './ActivityFormModal';
 
+const INDICATOR_LABELS: Record<string, string> = {
+  aman: 'Aman',
+  hampir_penuh: 'Hampir Penuh',
+  melebihi: 'Melebihi',
+};
+
+const ASSIGNMENT_ROLE_OPTIONS = ['Anggota', 'Pengolah Data', 'Pengawas', 'Lainnya'] as const;
+const PJ_ROLE = 'Penanggung Jawab';
+
 export const ActivitiesPage: React.FC = () => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const idParam = searchParams.get('id');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [teamMembers, setTeamMembers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [assignmentCandidates, setAssignmentCandidates] = useState<User[]>([]);  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
@@ -47,8 +55,9 @@ export const ActivitiesPage: React.FC = () => {
   // Form Penugasan + Preview State
   const [assignmentForm, setAssignmentForm] = useState({
     user_id: '',
-    peran: 'Pencacah',
-    volume: 1,
+    peran: 'Anggota',
+    peranLainnya: '',
+    volume: '1',
     satuan: 'Dokumen',
     mulai: '',
     selesai: '',
@@ -135,6 +144,17 @@ export const ActivitiesPage: React.FC = () => {
   // Hak akses tambah kegiatan: admin atau ketua tim.
   const canCreate = user?.peran === 'admin' || Boolean(user?.is_ketua);
 
+  // Peran PJ tidak diubah dari form ini agar kegiatan tetap memiliki tepat satu PJ.
+  const editingIsPj = editingAssignment?.peran === PJ_ROLE;
+  const assignmentRoleOptions: string[] = editingIsPj ? [PJ_ROLE] : [...ASSIGNMENT_ROLE_OPTIONS];
+
+  // Sembunyikan pegawai yang sudah ditugaskan, kecuali pegawai pada penugasan yang sedang diedit.
+  const selectableAssignmentCandidates = assignmentCandidates.filter(
+    (candidate) =>
+      candidate.id === Number(assignmentForm.user_id) ||
+      !assignments.some((assignment) => assignment.user_id === candidate.id)
+  );
+
   // Buka Form Tambah Kegiatan
   const handleOpenCreate = () => {
     setEditingActivity(null);
@@ -183,10 +203,10 @@ export const ActivitiesPage: React.FC = () => {
     try {
       const [asRes, memRes] = await Promise.all([
         api.get(`/activities/${act.id}/assignments`),
-        api.get(`/teams/${act.team_id}/members`),
+        api.get(`/activities/${act.id}/assignment-candidates`),
       ]);
       setAssignments(asRes.data.data || []);
-      setTeamMembers(memRes.data.data || []);
+      setAssignmentCandidates(memRes.data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -201,9 +221,10 @@ export const ActivitiesPage: React.FC = () => {
     setAssignmentError('');
     setPreviewError('');
     setAssignmentForm({
-      user_id: teamMembers[0]?.id ? String(teamMembers[0].id) : '',
-      peran: 'Pencacah',
-      volume: 10,
+      user_id: '',
+      peran: 'Anggota',
+      peranLainnya: '',
+      volume: '10',
       satuan: 'Dokumen',
       mulai: selectedActivity?.mulai || '',
       selesai: selectedActivity?.selesai || '',
@@ -211,41 +232,148 @@ export const ActivitiesPage: React.FC = () => {
     setShowAssignmentModal(true);
   };
 
-  // Preview Beban Kerja Sebelum Menyimpan Penugasan
-  const handlePreviewAssignment = async () => {
-    if (!selectedActivity || !assignmentForm.user_id) return;
+  // Buka form edit penugasan dengan nilai awal dari baris yang dipilih.
+  const handleOpenEditAssignment = (assignment: Assignment) => {
+    setEditingAssignment(assignment);
+    setPreviewResult(null);
+    setAssignmentError('');
     setPreviewError('');
-    setPreviewLoading(true);
-    try {
-      const res = await api.post('/assignments/preview', {
-        activity_id: selectedActivity.id,
-        user_id: parseInt(assignmentForm.user_id),
-        peran: assignmentForm.peran,
-        volume: parseFloat(assignmentForm.volume.toString()),
-        satuan: assignmentForm.satuan,
-        mulai: assignmentForm.mulai || undefined,
-        selesai: assignmentForm.selesai || undefined,
-        assignment_id: editingAssignment?.id,
-      });
-      setPreviewResult(res.data.data);
-    } catch (err: unknown) {
-      setPreviewError(getApiErrorMessage(err, 'Gagal menghitung pratinjau beban kerja.'));
-    } finally {
-      setPreviewLoading(false);
-    }
+
+    const peranTersedia = (ASSIGNMENT_ROLE_OPTIONS as readonly string[]).includes(assignment.peran);
+    const peran = assignment.peran === PJ_ROLE
+      ? PJ_ROLE
+      : peranTersedia
+        ? assignment.peran
+        : 'Lainnya';
+
+    setAssignmentForm({
+      user_id: String(assignment.user_id),
+      peran,
+      peranLainnya: peran === 'Lainnya' ? assignment.peran : '',
+      volume: String(assignment.volume ?? 0),
+      satuan: assignment.satuan ?? 'Dokumen',
+      mulai: assignment.mulai ?? '',
+      selesai: assignment.selesai ?? '',
+    });
+    setShowAssignmentModal(true);
   };
 
-  // Simpan Penugasan Pegawai
+  // Tutup form penugasan dan bersihkan hasil pratinjau.
+  const closeAssignmentForm = () => {
+    setShowAssignmentModal(false);
+    setPreviewResult(null);
+    setPreviewError('');
+    setAssignmentError('');
+  };
+
+  // Pratinjau dampak beban kerja diperbarui otomatis saat pegawai, volume, atau periode berubah.
+  // Endpoint ini hanya menghitung (tanpa menulis ke database).
+  useEffect(() => {
+    if (!showAssignmentModal || !selectedActivity) return undefined;
+
+    const userId = Number(assignmentForm.user_id);
+    const volume = Number(assignmentForm.volume);
+
+    if (!userId || !Number.isFinite(volume) || volume <= 0) {
+      setPreviewResult(null);
+      setPreviewError('');
+      setPreviewLoading(false);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(async () => {
+      setPreviewLoading(true);
+      setPreviewError('');
+
+      try {
+        const res = await api.post('/assignments/preview', {
+          activity_id: selectedActivity.id,
+          user_id: userId,
+          peran: assignmentForm.peran === 'Lainnya'
+            ? assignmentForm.peranLainnya.trim() || 'Lainnya'
+            : assignmentForm.peran,
+          volume,
+          satuan: assignmentForm.satuan,
+          mulai: assignmentForm.mulai || undefined,
+          selesai: assignmentForm.selesai || undefined,
+          assignment_id: editingAssignment?.id,
+        });
+        setPreviewResult(res.data?.data ?? null);
+      } catch (err: unknown) {
+        setPreviewResult(null);
+        setPreviewError(getApiErrorMessage(err, 'Gagal menghitung pratinjau beban kerja.'));
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showAssignmentModal,
+    selectedActivity,
+    editingAssignment,
+    assignmentForm.user_id,
+    assignmentForm.peran,
+    assignmentForm.peranLainnya,
+    assignmentForm.volume,
+    assignmentForm.satuan,
+    assignmentForm.mulai,
+    assignmentForm.selesai,
+  ]);
+
+  // Simpan Penugasan Pegawai (tambah atau edit tanpa membuat baris duplikat)
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedActivity) return;
     setAssignmentError('');
+
+    const userId = Number(assignmentForm.user_id);
+    const volume = Number(assignmentForm.volume);
+    const peran = assignmentForm.peran === 'Lainnya'
+      ? assignmentForm.peranLainnya.trim()
+      : assignmentForm.peran;
+    const errors: string[] = [];
+
+    if (!userId) errors.push('Pegawai yang ditugaskan wajib dipilih.');
+    if (!peran) errors.push('Peran penugasan wajib diisi.');
+    if (!Number.isFinite(volume) || volume < 0.01) errors.push('Volume penugasan minimal 0.01.');
+    if (!assignmentForm.satuan) errors.push('Satuan penugasan wajib dipilih.');
+
+    if (assignmentForm.mulai && assignmentForm.mulai < selectedActivity.mulai) {
+      errors.push('Tanggal mulai penugasan harus berada dalam periode kegiatan.');
+    }
+    if (assignmentForm.selesai && assignmentForm.selesai > selectedActivity.selesai) {
+      errors.push('Tanggal selesai penugasan harus berada dalam periode kegiatan.');
+    }
+    if (assignmentForm.mulai && assignmentForm.selesai && assignmentForm.selesai < assignmentForm.mulai) {
+      errors.push('Tanggal selesai penugasan tidak boleh sebelum tanggal mulai.');
+    }
+
+    const duplikat = assignments.some(
+      (assignment) => assignment.user_id === userId && assignment.id !== editingAssignment?.id
+    );
+    if (duplikat) errors.push('Pegawai ini sudah ditugaskan pada kegiatan tersebut.');
+
+    const pjLain = assignments.some(
+      (assignment) => assignment.peran === PJ_ROLE && assignment.id !== editingAssignment?.id
+    );
+    if (peran === PJ_ROLE && pjLain) errors.push('Kegiatan hanya boleh memiliki satu Penanggung Jawab.');
+    if (editingAssignment?.peran === PJ_ROLE && peran !== PJ_ROLE) {
+      errors.push('Kegiatan wajib memiliki satu Penanggung Jawab.');
+    }
+
+    if (errors.length > 0) {
+      setAssignmentError(errors.join(' '));
+      return;
+    }
+
     try {
       const payload = {
         activity_id: selectedActivity.id,
-        user_id: parseInt(assignmentForm.user_id),
-        peran: assignmentForm.peran,
-        volume: parseFloat(assignmentForm.volume.toString()),
+        user_id: userId,
+        peran,
+        volume,
         satuan: assignmentForm.satuan,
         mulai: assignmentForm.mulai || undefined,
         selesai: assignmentForm.selesai || undefined,
@@ -258,6 +386,8 @@ export const ActivitiesPage: React.FC = () => {
       }
 
       setShowAssignmentModal(false);
+      setPreviewResult(null);
+      setPreviewError('');
       handleOpenAssignments(selectedActivity);
       fetchActivities();
     } catch (err: unknown) {
@@ -596,6 +726,14 @@ export const ActivitiesPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-1 self-end sm:self-auto">
                       <button
+                        onClick={() => handleOpenEditAssignment(as)}
+                        className="p-1.5 text-slate-400 hover:text-sky-600 rounded transition min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        title="Edit Penugasan"
+                        aria-label={`Edit penugasan ${as.user?.nama ?? ''}`}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => handleDeleteAssignment(as)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition min-h-[36px] min-w-[36px] flex items-center justify-center"
                         title="Hapus Penugasan"
@@ -624,8 +762,20 @@ export const ActivitiesPage: React.FC = () => {
       {showAssignmentModal && (
         <div className="fixed inset-0 bg-bps/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-bold text-slate-900 mb-3">Tugaskan Pegawai ke Kegiatan</h3>
-            <form onSubmit={handleSaveAssignment} className="space-y-3.5">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingAssignment ? 'Edit Penugasan Pegawai' : 'Tugaskan Pegawai ke Kegiatan'}
+              </h3>
+              <button
+                type="button"
+                onClick={closeAssignmentForm}
+                aria-label="Tutup form penugasan"
+                className="text-slate-400 hover:text-slate-600 p-1.5 -mr-1.5 -mt-1 flex items-center justify-center min-h-[36px] min-w-[36px]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveAssignment} noValidate className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Pilih Pegawai</label>
                 <select
@@ -634,9 +784,11 @@ export const ActivitiesPage: React.FC = () => {
                   onChange={(e) => setAssignmentForm({ ...assignmentForm, user_id: e.target.value })}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
                 >
-                  <option value="">Pilih Anggota Tim</option>
-                  {teamMembers.map((m) => (
-                    <option key={m.id} value={m.id}>{m.nama} ({m.nip})</option>
+                  <option value="">Pilih Pegawai</option>
+                  {selectableAssignmentCandidates.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nama}{m.nip ? ` (${m.nip})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -644,13 +796,31 @@ export const ActivitiesPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Peran Penugasan</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={assignmentForm.peran}
                     onChange={(e) => setAssignmentForm({ ...assignmentForm, peran: e.target.value })}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
-                  />
+                    disabled={editingIsPj}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px] disabled:bg-slate-100 disabled:text-slate-500"
+                  >
+                    {assignmentRoleOptions.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
+                  {editingIsPj ? (
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      Peran Penanggung Jawab tidak dapat diubah agar kegiatan tetap memiliki satu PJ.
+                    </p>
+                  ) : assignmentForm.peran === 'Lainnya' ? (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Isi peran..."
+                      value={assignmentForm.peranLainnya}
+                      onChange={(e) => setAssignmentForm({ ...assignmentForm, peranLainnya: e.target.value })}
+                      className="mt-1.5 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
+                    />
+                  ) : null}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Satuan</label>
@@ -677,7 +847,7 @@ export const ActivitiesPage: React.FC = () => {
                   min="0.01"
                   required
                   value={assignmentForm.volume}
-                  onChange={(e) => setAssignmentForm({ ...assignmentForm, volume: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, volume: e.target.value })}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
                 />
               </div>
@@ -688,6 +858,8 @@ export const ActivitiesPage: React.FC = () => {
                   <input
                     type="date"
                     value={assignmentForm.mulai}
+                    min={selectedActivity?.mulai || undefined}
+                    max={selectedActivity?.selesai || undefined}
                     onChange={(e) => setAssignmentForm({ ...assignmentForm, mulai: e.target.value })}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
                   />
@@ -697,23 +869,33 @@ export const ActivitiesPage: React.FC = () => {
                   <input
                     type="date"
                     value={assignmentForm.selesai}
+                    min={assignmentForm.mulai || selectedActivity?.mulai || undefined}
+                    max={selectedActivity?.selesai || undefined}
                     onChange={(e) => setAssignmentForm({ ...assignmentForm, selesai: e.target.value })}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
                   />
                 </div>
               </div>
 
-              {/* Tombol Preview Workload Impact */}
+              {/* Pratinjau otomatis (tanpa menyimpan data) */}
               <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handlePreviewAssignment}
-                  disabled={previewLoading || !assignmentForm.user_id}
-                  className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 min-h-[40px]"
-                >
-                  {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
-                  Pratinjau Simulasi Dampak Beban Kerja
-                </button>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  <span className="flex items-center gap-1.5 font-bold">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Pratinjau Simulasi Dampak Beban Kerja
+                  </span>
+                  {previewLoading ? (
+                    <span className="flex items-center gap-1 font-semibold">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Menghitung...
+                    </span>
+                  ) : (
+                    <span className="text-amber-700">Diperbarui otomatis</span>
+                  )}
+                </div>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Dihitung dari WorkloadService berdasarkan volume x bobot, prorata tanggal, dan penugasan lain. Tidak ada data yang disimpan.
+                </p>
               </div>
 
               {previewError && (
@@ -723,31 +905,75 @@ export const ActivitiesPage: React.FC = () => {
                 </p>
               )}
 
-              {/* Box Hasil Preview */}
               {previewResult && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Beban Sebelum:</span>
-                    <span className="font-semibold">{previewResult.current_workload} pt ({previewResult.indicator_before})</span>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
+                  <div className="flex flex-wrap justify-between gap-1 text-[11px] text-slate-600">
+                    <span>
+                      Rencana: <strong>{previewResult.rencana.volume} {previewResult.rencana.satuan}</strong>
+                    </span>
+                    <span>
+                      Total <strong>{previewResult.rencana.total_poin} pt</strong> •{' '}
+                      {previewResult.rencana.mulai} s.d. {previewResult.rencana.selesai}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Beban Sesudah:</span>
-                    <span className="font-bold text-sky-700">{previewResult.simulated_workload} pt ({previewResult.indicator_after})</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Puncak Bersamaan:</span>
-                    <span className="font-bold text-slate-800">{previewResult.concurrent_assignments_peak} tugas</span>
-                  </div>
-                  {previewResult.is_over_threshold && (
-                    <p className="flex items-center gap-1 text-rose-600 font-bold mt-1">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Melebihi ambang batas bulanan!
+
+                  {previewResult.dampak_bulanan.map((impact) => (
+                    <div
+                      key={impact.bulan}
+                      className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-800">{impact.bulan}</span>
+                        <span
+                          className={`font-bold ${
+                            impact.indikator_sesudah === 'melebihi'
+                              ? 'text-rose-600'
+                              : impact.indikator_sesudah === 'hampir_penuh'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                          }`}
+                        >
+                          {INDICATOR_LABELS[impact.indikator_sesudah] ?? impact.indikator_sesudah}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Beban sebelum</span>
+                        <span className="font-semibold">
+                          {impact.beban_sebelum.toFixed(2)} pt ({impact.persentase_sebelum.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>{editingAssignment ? 'Perubahan beban' : 'Tambahan penugasan'}</span>
+                        <span className="font-semibold text-sky-700">{impact.tambahan_poin >= 0 ? '+' : ''}{impact.tambahan_poin.toFixed(2)} pt</span>
+                      </div>
+                      <div className="flex justify-between text-slate-700">
+                        <span>Beban sesudah</span>
+                        <span className="font-bold text-sky-800">
+                          {impact.beban_sesudah.toFixed(2)} pt ({impact.persentase_sesudah.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-500">
+                        <span>Penugasan bersamaan</span>
+                        <span>
+                          {impact.penugasan_bersamaan_sebelum} → {impact.penugasan_bersamaan_sesudah} tugas
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {previewResult.peringatan.map((warning, index) => (
+                    <p
+                      key={`${warning.jenis}-${warning.bulan}-${index}`}
+                      className="flex items-start gap-1.5 font-semibold text-rose-600"
+                    >
+                      <AlertTriangle className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+                      <span>{warning.pesan}</span>
                     </p>
-                  )}
-                  {previewResult.has_concurrency_warning && (
-                    <p className="flex items-center gap-1 text-amber-600 font-bold">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Melebihi batas aman penugasan bersamaan!
+                  ))}
+
+                  {previewResult.peringatan.length === 0 && (
+                    <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-800">
+                      Tidak ada peringatan beban atau penugasan bersamaan untuk kombinasi ini.
                     </p>
                   )}
                 </div>
@@ -763,7 +989,7 @@ export const ActivitiesPage: React.FC = () => {
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAssignmentModal(false)}
+                  onClick={closeAssignmentForm}
                   className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition min-h-[44px]"
                 >
                   Batal
@@ -772,7 +998,7 @@ export const ActivitiesPage: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 text-sm bg-sky-600 hover:bg-sky-700 text-white font-medium rounded-lg shadow-xs transition min-h-[44px]"
                 >
-                  Simpan Penugasan
+                  {editingAssignment ? 'Simpan Perubahan' : 'Simpan Penugasan'}
                 </button>
               </div>
             </form>

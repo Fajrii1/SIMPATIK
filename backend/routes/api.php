@@ -59,6 +59,7 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
 
         // Penugasan Pegawai ke Kegiatan & Pratinjau Beban Kerja (PRD Bagian 14)
         Route::get('activities/{activity}/assignments', [AssignmentController::class, 'indexForActivity']);
+        Route::get('activities/{activity}/assignment-candidates', [AssignmentController::class, 'candidates']);
         Route::post('activities/{activity}/assignments', [AssignmentController::class, 'storeForActivity']);
         Route::post('assignments/preview', [AssignmentController::class, 'preview']);
         Route::post('assignments/preview-batch', [AssignmentController::class, 'previewBatch']);
