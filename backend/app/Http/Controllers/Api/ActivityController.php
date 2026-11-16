@@ -111,7 +111,6 @@ class ActivityController extends Controller
                 'team_id' => $validated['team_id'],
                 'mulai' => $validated['mulai'],
                 'selesai' => $validated['selesai'],
-                'bobot' => $validated['bobot'] ?? 1.00,
                 'kegiatan_besar' => $validated['kegiatan_besar'] ?? false,
                 'selesai_manual' => false,
                 'selesai_pada' => null,
@@ -123,8 +122,9 @@ class ActivityController extends Controller
                 $assignment = $activity->assignments()->create([
                     'user_id' => $assignmentData['user_id'],
                     'peran' => $assignmentData['peran'],
-                    'volume' => $assignmentData['volume'],
-                    'satuan' => $assignmentData['satuan'],
+                    'jam_per_hari' => $assignmentData['jam_per_hari'],
+                    'volume' => $assignmentData['volume'] ?? null,
+                    'satuan' => $assignmentData['satuan'] ?? null,
                     'mulai' => $assignmentData['mulai'] ?? null,
                     'selesai' => $assignmentData['selesai'] ?? null,
                 ]);
@@ -132,7 +132,7 @@ class ActivityController extends Controller
                 Notification::create([
                     'user_id' => $assignment->user_id,
                     'tipe' => 'penugasan_baru',
-                    'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->volume} {$assignment->satuan}).",
+                    'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->jam_per_hari} jam/hari).",
                     'tautan' => "/kegiatan/{$activity->id}",
                 ]);
             }
@@ -172,7 +172,6 @@ class ActivityController extends Controller
             $sebelum = $activity->toArray();
             $oldMulai = $activity->mulai?->format('Y-m-d');
             $oldSelesai = $activity->selesai?->format('Y-m-d');
-            $oldBobot = (float) $activity->bobot;
 
             $assignedUserIds = $activity->assignments()
                 ->pluck('user_id')
@@ -199,7 +198,6 @@ class ActivityController extends Controller
             // Jika jadwal berubah, beri notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             $newMulai = $activity->mulai?->format('Y-m-d');
             $newSelesai = $activity->selesai?->format('Y-m-d');
-            $newBobot = (float) $activity->bobot;
             $scheduleChanged = $oldMulai !== $newMulai || $oldSelesai !== $newSelesai;
 
             if ($scheduleChanged) {
@@ -213,8 +211,8 @@ class ActivityController extends Controller
                 }
             }
 
-            // Perubahan tanggal atau bobot dapat memunculkan peringatan beban/menumpuk baru.
-            if ($scheduleChanged || abs($oldBobot - $newBobot) > 0.0001) {
+            // Perubahan tanggal dapat memunculkan peringatan beban/menumpuk baru.
+            if ($scheduleChanged) {
                 $this->workloadReminder->notifyNewWarnings(
                     $assignedUserIds,
                     $monthsForReminder,

@@ -13,18 +13,88 @@ use Illuminate\Support\Collection;
 class WorkloadService
 {
     /**
-     * Menghitung distribusi poin bulanan suatu penugasan secara proporsional hari (PRD Bagian 8.1).
-     *
-     * @return array<string, float> Array dengan kunci 'YYYY-MM' dan nilai poin bulan tersebut (2 desimal).
+     * Jam kerja per hari dari pengaturan (default 7 jam).
      */
-    public function calculateAssignmentMonthlyPoints(
-        float $volume,
-        float $bobot,
+    public function getDailyWorkHours(): float
+    {
+        $value = (float) Setting::getVal('jam_kerja_per_hari', 7);
+
+        return $value > 0 ? $value : 7.0;
+    }
+
+    /**
+     * Daftar hari libur (format Y-m-d) dari pengaturan.
+     *
+     * @return list<string>
+     */
+    public function getHolidayDates(): array
+    {
+        $raw = Setting::getVal('hari_libur', '[]');
+
+        if (is_array($raw)) {
+            $items = $raw;
+        } else {
+            $decoded = json_decode((string) $raw, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+
+        $dates = [];
+
+        foreach ($items as $item) {
+            if (! is_string($item) || $item === '') {
+                continue;
+            }
+
+            try {
+                $dates[] = Carbon::parse($item)->format('Y-m-d');
+            } catch (\Throwable) {
+                // Abaikan nilai yang bukan tanggal valid.
+            }
+        }
+
+        return array_values(array_unique($dates));
+    }
+
+    /**
+     * Menghitung jumlah hari kerja (Senin-Jumat, bukan hari libur) pada rentang tanggal.
+     */
+    public function countWorkdays(CarbonInterface|string $mulai, CarbonInterface|string $selesai, ?array $holidays = null): int
+    {
+        $start = Carbon::parse($mulai)->startOfDay();
+        $end = Carbon::parse($selesai)->startOfDay();
+
+        if ($start->gt($end)) {
+            return 0;
+        }
+
+        $holidays ??= $this->getHolidayDates();
+        $count = 0;
+        $cursor = $start->copy();
+
+        while ($cursor->lte($end)) {
+            if ($cursor->isWeekday() && ! in_array($cursor->format('Y-m-d'), $holidays, true)) {
+                $count++;
+            }
+
+            $cursor->addDay();
+        }
+
+        return $count;
+    }
+
+    /**
+     * Menghitung jam terpakai satu penugasan per bulan.
+     *
+     * Jam terpakai bulan = jam_per_hari x jumlah hari kerja pada irisan periode
+     * efektif penugasan dengan bulan tersebut.
+     *
+     * @return array<string, array{jam: float, hari_kerja: int}>
+     */
+    public function calculateAssignmentMonthlyHours(
+        float $jamPerHari,
         CarbonInterface|string $mulai,
         CarbonInterface|string $selesai
     ): array {
-        $poinTotal = round($volume * $bobot, 2);
-
         $startDate = Carbon::parse($mulai)->startOfDay();
         $endDate = Carbon::parse($selesai)->startOfDay();
 
@@ -32,19 +102,13 @@ class WorkloadService
             return [];
         }
 
-        $totalDays = $startDate->diffInDays($endDate) + 1;
-
-        if ($totalDays <= 0) {
-            return [];
-        }
-
+        $holidays = $this->getHolidayDates();
         $distribution = [];
         $currentMonth = $startDate->copy()->startOfMonth();
         $endMonth = $endDate->copy()->startOfMonth();
 
         while ($currentMonth->lte($endMonth)) {
             $monthKey = $currentMonth->format('Y-m');
-
             $monthStart = $currentMonth->copy()->startOfMonth();
             $monthEnd = $currentMonth->copy()->endOfMonth()->startOfDay();
 
@@ -52,9 +116,11 @@ class WorkloadService
             $overlapEnd = $monthEnd->lt($endDate) ? $monthEnd : $endDate;
 
             if ($overlapStart->lte($overlapEnd)) {
-                $daysInMonth = $overlapStart->diffInDays($overlapEnd) + 1;
-                $points = round($poinTotal * ($daysInMonth / $totalDays), 2);
-                $distribution[$monthKey] = $points;
+                $workdays = $this->countWorkdays($overlapStart, $overlapEnd, $holidays);
+                $distribution[$monthKey] = [
+                    'jam' => round($jamPerHari * $workdays, 2),
+                    'hari_kerja' => $workdays,
+                ];
             }
 
             $currentMonth->addMonth();
@@ -65,7 +131,7 @@ class WorkloadService
 
     /**
      * Menghitung puncak jumlah penugasan yang berjalan bersamaan (tumpang tindih pada hari yang sama)
-     * dalam satu bulan kalender (PRD Bagian 8.2).
+     * dalam satu bulan kalender.
      *
      * @param  Collection<int, Assignment>  $assignments
      */
@@ -100,8 +166,7 @@ class WorkloadService
     }
 
     /**
-     * Menghitung puncak jumlah kegiatan besar yang berjalan bersamaan (tumpang tindih pada hari yang sama)
-     * dalam satu bulan kalender (PRD Bagian 8.2).
+     * Menghitung puncak jumlah kegiatan besar yang berjalan bersamaan dalam satu bulan kalender.
      */
     public function calculatePeakConcurrentKegiatanBesar(CarbonInterface $monthStart, CarbonInterface $monthEnd): int
     {
@@ -133,7 +198,7 @@ class WorkloadService
     }
 
     /**
-     * Menghitung total beban kerja bulanan seorang pegawai pada bulan tertentu (PRD Bagian 8.1).
+     * Menghitung beban kerja bulanan seorang pegawai (jam terpakai, kapasitas, persentase).
      *
      * @param  string  $month  Format 'YYYY-MM'
      * @param  int|null  $excludeAssignmentId  ID penugasan yang diabaikan (misal saat pratinjau update)
@@ -147,7 +212,6 @@ class WorkloadService
         $monthStart = $monthDate->copy()->startOfMonth();
         $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
 
-        // Ambil seluruh penugasan aktif (tidak terhapus secara soft delete)
         $query = Assignment::query()
             ->with('activity')
             ->where('user_id', $userId)
@@ -161,9 +225,12 @@ class WorkloadService
 
         $assignments = $query->get();
 
-        $totalBeban = 0.0;
+        $dailyWorkHours = $this->getDailyWorkHours();
+        $holidays = $this->getHolidayDates();
+        $totalHours = 0.0;
         $activeAssignmentsCount = 0;
         $assignmentBreakdown = [];
+        $dailyLoads = [];
 
         foreach ($assignments as $assignment) {
             $activity = $assignment->activity;
@@ -173,78 +240,82 @@ class WorkloadService
 
             $effectiveStart = $assignment->mulai ? Carbon::parse($assignment->mulai)->startOfDay() : Carbon::parse($activity->mulai)->startOfDay();
             $effectiveEnd = $assignment->selesai ? Carbon::parse($assignment->selesai)->startOfDay() : Carbon::parse($activity->selesai)->startOfDay();
+            $jamPerHari = (float) $assignment->jam_per_hari;
 
-            // Cek apakah penugasan beririsan dengan bulan terpilih
             if ($effectiveStart->lte($monthEnd) && $effectiveEnd->gte($monthStart)) {
+                $overlapStart = $effectiveStart->gt($monthStart) ? $effectiveStart : $monthStart;
+                $overlapEnd = $effectiveEnd->lt($monthEnd) ? $effectiveEnd : $monthEnd;
+                $workdays = $this->countWorkdays($overlapStart, $overlapEnd, $holidays);
+                $hoursInMonth = round($jamPerHari * $workdays, 2);
+
                 $activeAssignmentsCount++;
-
-                $monthlyPoints = $this->calculateAssignmentMonthlyPoints(
-                    (float) $assignment->volume,
-                    (float) ($activity->bobot ?? 1.00),
-                    $effectiveStart,
-                    $effectiveEnd
-                );
-
-                $pointsInMonth = $monthlyPoints[$month] ?? 0.0;
-                $totalBeban += $pointsInMonth;
+                $totalHours += $hoursInMonth;
 
                 $assignmentBreakdown[] = [
                     'assignment_id' => $assignment->id,
                     'activity_id' => $activity->id,
                     'activity_nama' => $activity->nama,
                     'peran' => $assignment->peran,
-                    'volume' => (float) $assignment->volume,
+                    'jam_per_hari' => $jamPerHari,
+                    'hari_kerja' => $workdays,
+                    'jam_terpakai' => $hoursInMonth,
+                    'volume' => $assignment->volume !== null ? (float) $assignment->volume : null,
                     'satuan' => $assignment->satuan,
-                    'poin_bulan' => $pointsInMonth,
                     'mulai' => $effectiveStart->format('Y-m-d'),
                     'selesai' => $effectiveEnd->format('Y-m-d'),
                 ];
+
+                // Akumulasi beban harian untuk hari kerja pada bulan ini.
+                $cursor = $overlapStart->copy();
+                while ($cursor->lte($overlapEnd)) {
+                    if ($cursor->isWeekday() && ! in_array($cursor->format('Y-m-d'), $holidays, true)) {
+                        $key = $cursor->format('Y-m-d');
+                        $dailyLoads[$key] = round(($dailyLoads[$key] ?? 0.0) + $jamPerHari, 2);
+                    }
+                    $cursor->addDay();
+                }
             }
         }
 
-        $totalBeban = round($totalBeban, 2);
-        $ambang = (float) Setting::getVal('ambang_beban_bulanan', 100);
-        $persentase = $ambang > 0 ? round(($totalBeban / $ambang) * 100, 2) : 0.0;
+        $totalHours = round($totalHours, 2);
+        $capacityWorkdays = $this->countWorkdays($monthStart, $monthEnd, $holidays);
+        $capacityHours = round($capacityWorkdays * $dailyWorkHours, 2);
+        $persentase = $capacityHours > 0 ? round(($totalHours / $capacityHours) * 100, 2) : 0.0;
 
-        $indikator = $this->determineIndicator($persentase);
+        $excessDays = [];
+        foreach ($dailyLoads as $tanggal => $jam) {
+            if ($jam > $dailyWorkHours + 0.0001) {
+                $excessDays[] = [
+                    'tanggal' => $tanggal,
+                    'jam' => round($jam, 2),
+                ];
+            }
+        }
+        usort($excessDays, fn ($a, $b) => strcmp($a['tanggal'], $b['tanggal']));
 
-        // Hitung puncak tumpang tindih harian yang benar-benar bersamaan
         $peakConcurrent = $this->calculatePeakConcurrentAssignments($assignments, $monthStart, $monthEnd);
 
         return [
             'user_id' => $userId,
             'bulan' => $month,
-            'beban' => $totalBeban,
-            'ambang' => $ambang,
+            'jam_terpakai' => $totalHours,
+            'kapasitas_jam' => $capacityHours,
+            'hari_kerja' => $capacityWorkdays,
+            'jam_kerja_per_hari' => $dailyWorkHours,
+            // Alias lama agar konsumen yang belum diperbarui tetap membaca nilai jam yang benar.
+            'beban' => $totalHours,
             'persentase' => $persentase,
-            'indikator' => $indikator,
+            'indikator' => $this->determineIndicator($persentase),
             'jumlah_penugasan' => $activeAssignmentsCount,
             'penugasan_bersamaan_maks' => $peakConcurrent,
+            'beban_harian_maks' => ! empty($dailyLoads) ? max($dailyLoads) : 0.0,
+            'hari_melebihi_kapasitas' => $excessDays,
             'rincian' => $assignmentBreakdown,
         ];
     }
 
     /**
-     * Menentukan kategori indikator berdasarkan persentase terhadap ambang batas (PRD Bagian 8.1).
-     *
-     * - 'aman': < 80%
-     * - 'hampir_penuh': 80% s.d. < 100%
-     * - 'melebihi': >= 100%
-     */
-    /**
-     * Mendapatkan nilai ambang beban bulanan dari pengaturan.
-     */
-    public function getMonthlyThreshold(): float
-    {
-        return (float) Setting::getVal('ambang_beban_bulanan', 100);
-    }
-
-    /**
-     * Menentukan kategori indikator berdasarkan persentase terhadap ambang batas (PRD Bagian 8.1).
-     *
-     * - 'aman': < 80%
-     * - 'hampir_penuh': 80% s.d. < 100%
-     * - 'melebihi': >= 100%
+     * Menentukan kategori indikator berdasarkan persentase kapasitas bulanan.
      */
     public function determineIndicator(float $persentase): string
     {
@@ -260,7 +331,7 @@ class WorkloadService
     }
 
     /**
-     * Menghitung seluruh peringatan jadwal menumpuk untuk suatu bulan (PRD Bagian 8.2).
+     * Menghitung seluruh peringatan jadwal menumpuk untuk suatu bulan.
      *
      * @param  string  $month  Format 'YYYY-MM'
      * @return array<int, array{jenis: string, pegawai_id: int|null, bulan: string, pesan: string}>
@@ -269,7 +340,6 @@ class WorkloadService
     {
         $warnings = [];
 
-        $ambangBeban = (float) Setting::getVal('ambang_beban_bulanan', 100);
         $maksPenugasan = (int) Setting::getVal('maks_penugasan_bersamaan', 3);
         $maksKegiatanBesar = (int) Setting::getVal('maks_kegiatan_besar_bersamaan', 3);
 
@@ -277,14 +347,12 @@ class WorkloadService
         $monthStart = $monthDate->copy()->startOfMonth();
         $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
 
-        // 1 & 2: Peringatan Beban & Penugasan Bersamaan per Pegawai Aktif
         $users = User::where('aktif', true)->get();
 
         foreach ($users as $user) {
             $workload = $this->calculateMonthlyWorkloadForUser($user, $month);
 
-            // Peringatan beban mencapai atau melebihi ambang
-            if ($workload['beban'] >= $ambangBeban) {
+            if ($workload['persentase'] >= 100.0) {
                 $warnings[] = [
                     'jenis' => 'beban',
                     'tipe' => 'beban',
@@ -296,15 +364,40 @@ class WorkloadService
                         'nama' => $user->nama,
                     ],
                     'bulan' => $month,
-                    'pesan' => "Beban kerja {$user->nama} pada bulan {$month} mencapai {$workload['beban']} poin (melebihi/mencapai ambang {$ambangBeban} poin).",
+                    'pesan' => "Beban kerja {$user->nama} pada bulan {$month} mencapai {$workload['jam_terpakai']} jam dari kapasitas {$workload['kapasitas_jam']} jam ({$workload['persentase']}%).",
                     'detail' => [
-                        'beban_aktual' => $workload['beban'],
-                        'ambang' => $ambangBeban,
+                        'jam_terpakai' => $workload['jam_terpakai'],
+                        'kapasitas_jam' => $workload['kapasitas_jam'],
+                        'persentase' => $workload['persentase'],
                     ],
                 ];
             }
 
-            // Peringatan penugasan bersamaan mencapai batas atau lebih (berdasarkan tanggal tumpang tindih nyata)
+            if ($workload['hari_melebihi_kapasitas'] !== []) {
+                $tanggal = array_map(
+                    fn ($item) => Carbon::parse($item['tanggal'])->format('d/m/Y').' ('.$item['jam'].' jam)',
+                    $workload['hari_melebihi_kapasitas']
+                );
+
+                $warnings[] = [
+                    'jenis' => 'melebihi_kapasitas_harian',
+                    'tipe' => 'melebihi_kapasitas_harian',
+                    'tingkat_risiko' => 'tinggi',
+                    'pegawai_id' => $user->id,
+                    'pegawai_nama' => $user->nama,
+                    'user' => [
+                        'id' => $user->id,
+                        'nama' => $user->nama,
+                    ],
+                    'bulan' => $month,
+                    'pesan' => "Beban harian {$user->nama} melebihi kapasitas {$workload['jam_kerja_per_hari']} jam per hari pada: ".implode(', ', $tanggal).'.',
+                    'detail' => [
+                        'kapasitas_harian' => $workload['jam_kerja_per_hari'],
+                        'hari' => $workload['hari_melebihi_kapasitas'],
+                    ],
+                ];
+            }
+
             if ($workload['penugasan_bersamaan_maks'] >= $maksPenugasan) {
                 $warnings[] = [
                     'jenis' => 'penugasan_bersamaan',
@@ -326,7 +419,6 @@ class WorkloadService
             }
         }
 
-        // 3: Peringatan Kegiatan Besar Bersamaan (Tingkat Kantor berdasarkan tanggal tumpang tindih nyata)
         $peakKegiatanBesar = $this->calculatePeakConcurrentKegiatanBesar($monthStart, $monthEnd);
 
         if ($peakKegiatanBesar > $maksKegiatanBesar) {
@@ -350,7 +442,7 @@ class WorkloadService
     }
 
     /**
-     * Melakukan simulasi (pratinjau) dampak suatu penugasan tanpa menyimpan ke database (PRD Bagian 14).
+     * Melakukan simulasi (pratinjau) dampak suatu penugasan tanpa menyimpan ke database.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
@@ -359,8 +451,9 @@ class WorkloadService
     {
         $userId = (int) $data['user_id'];
         $activityId = (int) $data['activity_id'];
-        $volume = (float) $data['volume'];
-        $satuan = $data['satuan'];
+        $jamPerHari = (float) $data['jam_per_hari'];
+        $volume = isset($data['volume']) && $data['volume'] !== null ? (float) $data['volume'] : null;
+        $satuan = $data['satuan'] ?? null;
         $peran = $data['peran'];
         $excludeAssignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
 
@@ -370,14 +463,8 @@ class WorkloadService
         $mulai = ! empty($data['mulai']) ? Carbon::parse($data['mulai'])->startOfDay() : Carbon::parse($activity->mulai)->startOfDay();
         $selesai = ! empty($data['selesai']) ? Carbon::parse($data['selesai'])->startOfDay() : Carbon::parse($activity->selesai)->startOfDay();
 
-        $bobot = (float) ($activity->bobot ?? 1.00);
-        $totalPoints = round($volume * $bobot, 2);
+        $simulatedDistribution = $this->calculateAssignmentMonthlyHours($jamPerHari, $mulai, $selesai);
 
-        // Distribusi poin rencana penugasan
-        $simulatedDistribution = $this->calculateAssignmentMonthlyPoints($volume, $bobot, $mulai, $selesai);
-
-        // Pada mode edit, hitung kontribusi penugasan lama agar pratinjau menggambarkan
-        // penggantian penugasan (bukan penambahan) dan tidak menghitung dua kali.
         $oldAssignment = null;
         $oldDistribution = [];
 
@@ -396,24 +483,22 @@ class WorkloadService
                     ? Carbon::parse($oldAssignment->selesai)->startOfDay()
                     : Carbon::parse($oldActivity->selesai)->startOfDay();
 
-                $oldDistribution = $this->calculateAssignmentMonthlyPoints(
-                    (float) $oldAssignment->volume,
-                    (float) ($oldActivity->bobot ?? 1.00),
+                $oldDistribution = $this->calculateAssignmentMonthlyHours(
+                    (float) $oldAssignment->jam_per_hari,
                     $oldStart,
                     $oldEnd
                 );
             }
         }
 
-        $ambangBeban = (float) Setting::getVal('ambang_beban_bulanan', 100);
+        $dailyWorkHours = $this->getDailyWorkHours();
         $maksPenugasan = (int) Setting::getVal('maks_penugasan_bersamaan', 3);
+        $holidays = $this->getHolidayDates();
 
         $monthlyImpacts = [];
         $warnings = [];
-        $hasExceededThreshold = false;
+        $hasExceededDaily = false;
 
-        // Gabungkan bulan dari rencana baru dan penugasan lama yang sedang diedit,
-        // sehingga perubahan periode juga terlihat dampaknya pada bulan lama.
         $months = array_keys($simulatedDistribution + $oldDistribution);
         sort($months);
 
@@ -422,27 +507,18 @@ class WorkloadService
             $monthStart = $monthDate->copy()->startOfMonth();
             $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
 
-            $additionalPoints = (float) ($simulatedDistribution[$month] ?? 0);
-            $oldPoints = (float) ($oldDistribution[$month] ?? 0);
-            $deltaPoints = round($additionalPoints - $oldPoints, 2);
+            $additionalHours = (float) ($simulatedDistribution[$month]['jam'] ?? 0);
+            $oldHours = (float) ($oldDistribution[$month]['jam'] ?? 0);
+            $deltaHours = round($additionalHours - $oldHours, 2);
 
-            // Beban sebelum = beban aktual saat ini (termasuk penugasan yang sedang diedit).
             $currentWorkload = $this->calculateMonthlyWorkloadForUser($user, $month);
+            $hoursBefore = $currentWorkload['jam_terpakai'];
+            $hoursAfter = round(max(0, $hoursBefore + $deltaHours), 2);
 
-            $bebanSebelum = $currentWorkload['beban'];
-            $bebanSesudah = round(max(0, $bebanSebelum + $deltaPoints), 2);
+            $capacityHours = $currentWorkload['kapasitas_jam'];
+            $percentageBefore = $currentWorkload['persentase'];
+            $percentageAfter = $capacityHours > 0 ? round(($hoursAfter / $capacityHours) * 100, 2) : 0.0;
 
-            $persentaseSebelum = $currentWorkload['persentase'];
-            $persentaseSesudah = $ambangBeban > 0 ? round(($bebanSesudah / $ambangBeban) * 100, 2) : 0.0;
-
-            $indikatorSebelum = $currentWorkload['indikator'];
-            $indikatorSesudah = $this->determineIndicator($persentaseSesudah);
-
-            // Hitung simulasi penugasan bersamaan harian
-            $daysInMonth = $monthDate->daysInMonth;
-            $dailyCounts = array_fill(1, $daysInMonth, 0);
-
-            // Hitung penugasan yang sudah ada
             $existingAssignments = Assignment::query()
                 ->with('activity')
                 ->where('user_id', $userId)
@@ -450,6 +526,35 @@ class WorkloadService
                 ->when($excludeAssignmentId, fn ($q) => $q->where('id', '!=', $excludeAssignmentId))
                 ->get();
 
+            // Simulasi beban harian setelah penugasan baru ditambahkan.
+            $dailyLoads = [];
+            foreach ($existingAssignments as $existing) {
+                $eAct = $existing->activity;
+                if (! $eAct) {
+                    continue;
+                }
+                $eStart = $existing->mulai ? Carbon::parse($existing->mulai)->startOfDay() : Carbon::parse($eAct->mulai)->startOfDay();
+                $eEnd = $existing->selesai ? Carbon::parse($existing->selesai)->startOfDay() : Carbon::parse($eAct->selesai)->startOfDay();
+
+                if ($eStart->lte($monthEnd) && $eEnd->gte($monthStart)) {
+                    $this->accumulateDailyLoad($dailyLoads, $eStart, $eEnd, $monthStart, $monthEnd, (float) $existing->jam_per_hari, $holidays);
+                }
+            }
+
+            $simStart = $mulai->gt($monthStart) ? $mulai : $monthStart;
+            $simEnd = $selesai->lt($monthEnd) ? $selesai : $monthEnd;
+            $this->accumulateDailyLoad($dailyLoads, $simStart, $simEnd, $monthStart, $monthEnd, $jamPerHari, $holidays);
+
+            $excessDays = [];
+            foreach ($dailyLoads as $tanggal => $jam) {
+                if ($jam > $dailyWorkHours + 0.0001) {
+                    $excessDays[] = ['tanggal' => $tanggal, 'jam' => round($jam, 2)];
+                }
+            }
+            usort($excessDays, fn ($a, $b) => strcmp($a['tanggal'], $b['tanggal']));
+
+            // Concurrency simulation (semua hari, sama seperti peringatan lama).
+            $dailyCounts = array_fill(1, $monthDate->daysInMonth, 0);
             foreach ($existingAssignments as $existing) {
                 $eAct = $existing->activity;
                 if (! $eAct) {
@@ -467,54 +572,58 @@ class WorkloadService
                 }
             }
 
-            // Tambahkan rencana penugasan yang disimulasikan
-            $simClampedStart = $mulai->gt($monthStart) ? $mulai : $monthStart;
-            $simClampedEnd = $selesai->lt($monthEnd) ? $selesai : $monthEnd;
-            for ($d = (int) $simClampedStart->format('j'); $d <= (int) $simClampedEnd->format('j'); $d++) {
-                $dailyCounts[$d]++;
+            if ($simStart->lte($simEnd)) {
+                for ($d = (int) $simStart->format('j'); $d <= (int) $simEnd->format('j'); $d++) {
+                    $dailyCounts[$d]++;
+                }
             }
 
-            $concurrencySesudah = ! empty($dailyCounts) ? max($dailyCounts) : 1;
-            $concurrencySebelum = $currentWorkload['penugasan_bersamaan_maks'];
+            $concurrencyAfter = ! empty($dailyCounts) ? max($dailyCounts) : 1;
+            $concurrencyBefore = $currentWorkload['penugasan_bersamaan_maks'];
 
-            // Jumlah total penugasan di bulan ini (ganti penugasan lama dengan penugasan baru).
-            $penugasanSesudah = $currentWorkload['jumlah_penugasan']
-                - (isset($oldDistribution[$month]) ? 1 : 0)
-                + (isset($simulatedDistribution[$month]) ? 1 : 0);
-
-            // Peringatan hanya berlaku pada bulan yang memang terdampak oleh penugasan baru.
             if (isset($simulatedDistribution[$month])) {
-                if ($bebanSesudah >= $ambangBeban) {
-                    $hasExceededThreshold = true;
+                if ($excessDays !== []) {
+                    $hasExceededDaily = true;
+                    $tanggal = array_map(
+                        fn ($item) => Carbon::parse($item['tanggal'])->format('d/m/Y').' ('.$item['jam'].' jam)',
+                        $excessDays
+                    );
+
                     $warnings[] = [
-                        'jenis' => 'beban',
+                        'jenis' => 'melebihi_kapasitas_harian',
                         'bulan' => $month,
-                        'pesan' => "Penugasan ini menyebabkan beban kerja {$user->nama} pada bulan {$month} mencapai {$bebanSesudah} poin (melebihi/mencapai ambang {$ambangBeban}).",
+                        'pesan' => "Penugasan ini menyebabkan beban harian {$user->nama} melebihi kapasitas {$dailyWorkHours} jam pada: ".implode(', ', $tanggal).'.',
                     ];
                 }
 
-                if ($concurrencySesudah >= $maksPenugasan) {
+                if ($concurrencyAfter >= $maksPenugasan) {
                     $warnings[] = [
                         'jenis' => 'penugasan_bersamaan',
                         'bulan' => $month,
-                        'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencySesudah} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
+                        'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencyAfter} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
                     ];
                 }
             }
 
             $monthlyImpacts[] = [
                 'bulan' => $month,
-                'tambahan_poin' => $deltaPoints,
-                'beban_sebelum' => $bebanSebelum,
-                'beban_sesudah' => $bebanSesudah,
-                'persentase_sebelum' => $persentaseSebelum,
-                'persentase_sesudah' => $persentaseSesudah,
-                'indikator_sebelum' => $indikatorSebelum,
-                'indikator_sesudah' => $indikatorSesudah,
+                'tambahan_jam' => $deltaHours,
+                'hari_kerja' => (int) ($simulatedDistribution[$month]['hari_kerja'] ?? 0),
+                'jam_terpakai' => $additionalHours,
+                'kapasitas_jam' => $capacityHours,
+                'beban_sebelum' => $hoursBefore,
+                'beban_sesudah' => $hoursAfter,
+                'persentase_sebelum' => $percentageBefore,
+                'persentase_sesudah' => $percentageAfter,
+                'indikator_sebelum' => $currentWorkload['indikator'],
+                'indikator_sesudah' => $this->determineIndicator($percentageAfter),
                 'jumlah_penugasan_sebelum' => $currentWorkload['jumlah_penugasan'],
-                'jumlah_penugasan_sesudah' => $penugasanSesudah,
-                'penugasan_bersamaan_sebelum' => $concurrencySebelum,
-                'penugasan_bersamaan_sesudah' => $concurrencySesudah,
+                'jumlah_penugasan_sesudah' => $currentWorkload['jumlah_penugasan']
+                    - (isset($oldDistribution[$month]) ? 1 : 0)
+                    + (isset($simulatedDistribution[$month]) ? 1 : 0),
+                'penugasan_bersamaan_sebelum' => $concurrencyBefore,
+                'penugasan_bersamaan_sesudah' => $concurrencyAfter,
+                'hari_melebihi_kapasitas' => $excessDays,
             ];
         }
 
@@ -526,27 +635,25 @@ class WorkloadService
             'kegiatan' => [
                 'id' => $activity->id,
                 'nama' => $activity->nama,
-                'bobot' => $bobot,
                 'kegiatan_besar' => (bool) $activity->kegiatan_besar,
             ],
             'rencana' => [
                 'peran' => $peran,
+                'jam_per_hari' => $jamPerHari,
                 'volume' => $volume,
                 'satuan' => $satuan,
                 'mulai' => $mulai->format('Y-m-d'),
                 'selesai' => $selesai->format('Y-m-d'),
-                'total_poin' => $totalPoints,
+                'total_jam' => round(array_sum(array_column($simulatedDistribution, 'jam')), 2),
             ],
             'dampak_bulanan' => $monthlyImpacts,
             'peringatan' => $warnings,
-            'melebihi_ambang' => $hasExceededThreshold,
+            'melebihi_kapasitas_harian' => $hasExceededDaily,
         ];
     }
 
     /**
      * Pratinjau batch dampak beberapa penugasan dari kegiatan yang belum disimpan.
-     *
-     * Tidak menulis ke database dan tidak mengubah hasil perhitungan yang ada.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
@@ -554,16 +661,15 @@ class WorkloadService
     public function previewBatchImpact(array $data): array
     {
         $teamId = (int) $data['team_id'];
-        $bobot = (float) $data['bobot'];
         $kegiatanMulai = Carbon::parse($data['mulai'])->startOfDay();
         $kegiatanSelesai = ! empty($data['selesai'])
             ? Carbon::parse($data['selesai'])->startOfDay()
             : $kegiatanMulai->copy();
 
-        $ambangBeban = (float) Setting::getVal('ambang_beban_bulanan', 100);
+        $dailyWorkHours = $this->getDailyWorkHours();
         $maksPenugasan = (int) Setting::getVal('maks_penugasan_bersamaan', 3);
+        $holidays = $this->getHolidayDates();
 
-        // Kelompokkan baris per pegawai, dengan periode efektif per baris.
         $byUser = [];
 
         foreach ($data['assignments'] ?? [] as $row) {
@@ -593,12 +699,11 @@ class WorkloadService
                 ->whereHas('activity', fn ($q) => $q->whereNull('deleted_at'))
                 ->get();
 
-            // Akumulasi tambahan poin per bulan dari seluruh baris pegawai ini.
             $monthlyAdditions = [];
 
             foreach ($userRows as $row) {
-                foreach ($this->calculateAssignmentMonthlyPoints((float) $row['volume'], $bobot, $row['mulai'], $row['selesai']) as $month => $points) {
-                    $monthlyAdditions[$month] = round(($monthlyAdditions[$month] ?? 0.0) + $points, 2);
+                foreach ($this->calculateAssignmentMonthlyHours((float) $row['jam_per_hari'], $row['mulai'], $row['selesai']) as $month => $info) {
+                    $monthlyAdditions[$month] = round(($monthlyAdditions[$month] ?? 0.0) + $info['jam'], 2);
                 }
             }
 
@@ -607,17 +712,16 @@ class WorkloadService
             $monthlyImpacts = [];
             $warnings = [];
 
-            foreach ($monthlyAdditions as $month => $additionalPoints) {
+            foreach ($monthlyAdditions as $month => $additionalHours) {
                 $monthDate = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
                 $monthStart = $monthDate->copy()->startOfMonth();
                 $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
 
                 $currentWorkload = $this->calculateMonthlyWorkloadForUser($userId, $month);
-                $bebanSebelum = $currentWorkload['beban'];
-                $bebanSesudah = round($bebanSebelum + $additionalPoints, 2);
-                $persentaseSebelum = $currentWorkload['persentase'];
-                $persentaseSesudah = $ambangBeban > 0 ? round(($bebanSesudah / $ambangBeban) * 100, 2) : 0.0;
-                $indikatorSesudah = $this->determineIndicator($persentaseSesudah);
+                $hoursBefore = $currentWorkload['jam_terpakai'];
+                $hoursAfter = round($hoursBefore + $additionalHours, 2);
+                $capacityHours = $currentWorkload['kapasitas_jam'];
+                $percentageAfter = $capacityHours > 0 ? round(($hoursAfter / $capacityHours) * 100, 2) : 0.0;
 
                 $rowsInMonth = count(array_filter(
                     $userRows,
@@ -626,18 +730,8 @@ class WorkloadService
                 $jumlahSebelum = $currentWorkload['jumlah_penugasan'];
                 $jumlahSesudah = $jumlahSebelum + $rowsInMonth;
 
-                // Puncak harian: penugasan terdaftar ditambah baris batch pada bulan ini.
                 $dailyCounts = array_fill(1, $monthDate->daysInMonth, 0);
-
-                $countOnDay = function ($start, $end) use (&$dailyCounts, $monthStart, $monthEnd) {
-                    if ($start->lte($monthEnd) && $end->gte($monthStart)) {
-                        $clampedStart = $start->gt($monthStart) ? $start : $monthStart;
-                        $clampedEnd = $end->lt($monthEnd) ? $end : $monthEnd;
-                        for ($d = (int) $clampedStart->format('j'); $d <= (int) $clampedEnd->format('j'); $d++) {
-                            $dailyCounts[$d]++;
-                        }
-                    }
-                };
+                $dailyLoads = [];
 
                 foreach ($existingAssignments as $existing) {
                     $activity = $existing->activity;
@@ -653,45 +747,62 @@ class WorkloadService
                         ? Carbon::parse($existing->selesai)->startOfDay()
                         : Carbon::parse($activity->selesai)->startOfDay();
 
-                    $countOnDay($existingStart, $existingEnd);
+                    $this->countConcurrentDays($dailyCounts, $existingStart, $existingEnd, $monthStart, $monthEnd);
+                    $this->accumulateDailyLoad($dailyLoads, $existingStart, $existingEnd, $monthStart, $monthEnd, (float) $existing->jam_per_hari, $holidays);
                 }
 
                 foreach ($userRows as $row) {
-                    $countOnDay($row['mulai'], $row['selesai']);
+                    $this->countConcurrentDays($dailyCounts, $row['mulai'], $row['selesai'], $monthStart, $monthEnd);
+                    $this->accumulateDailyLoad($dailyLoads, $row['mulai'], $row['selesai'], $monthStart, $monthEnd, (float) $row['jam_per_hari'], $holidays);
                 }
 
-                $concurrencySesudah = max($dailyCounts);
-                $concurrencySebelum = $currentWorkload['penugasan_bersamaan_maks'];
+                $concurrencyAfter = max($dailyCounts);
+                $concurrencyBefore = $currentWorkload['penugasan_bersamaan_maks'];
 
-                if ($bebanSesudah >= $ambangBeban) {
+                $excessDays = [];
+                foreach ($dailyLoads as $tanggal => $jam) {
+                    if ($jam > $dailyWorkHours + 0.0001) {
+                        $excessDays[] = ['tanggal' => $tanggal, 'jam' => round($jam, 2)];
+                    }
+                }
+                usort($excessDays, fn ($a, $b) => strcmp($a['tanggal'], $b['tanggal']));
+
+                if ($excessDays !== []) {
+                    $tanggal = array_map(
+                        fn ($item) => Carbon::parse($item['tanggal'])->format('d/m/Y').' ('.$item['jam'].' jam)',
+                        $excessDays
+                    );
+
                     $warnings[] = [
-                        'jenis' => 'beban',
+                        'jenis' => 'melebihi_kapasitas_harian',
                         'bulan' => $month,
-                        'pesan' => "Penugasan ini menyebabkan beban kerja {$user->nama} pada bulan {$month} mencapai {$bebanSesudah} poin (melebihi/mencapai ambang {$ambangBeban}).",
+                        'pesan' => "Penugasan ini menyebabkan beban harian {$user->nama} melebihi kapasitas {$dailyWorkHours} jam pada: ".implode(', ', $tanggal).'.',
                     ];
                 }
 
-                if ($concurrencySesudah >= $maksPenugasan) {
+                if ($concurrencyAfter >= $maksPenugasan) {
                     $warnings[] = [
                         'jenis' => 'penugasan_bersamaan',
                         'bulan' => $month,
-                        'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencySesudah} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
+                        'pesan' => "Penugasan ini menyebabkan {$user->nama} memiliki {$concurrencyAfter} penugasan bersamaan pada tanggal yang sama di bulan {$month} (batas: {$maksPenugasan}).",
                     ];
                 }
 
                 $monthlyImpacts[] = [
                     'bulan' => $month,
-                    'tambahan_poin' => $additionalPoints,
-                    'beban_sebelum' => $bebanSebelum,
-                    'beban_sesudah' => $bebanSesudah,
-                    'persentase_sebelum' => $persentaseSebelum,
-                    'persentase_sesudah' => $persentaseSesudah,
+                    'tambahan_jam' => $additionalHours,
+                    'kapasitas_jam' => $capacityHours,
+                    'beban_sebelum' => $hoursBefore,
+                    'beban_sesudah' => $hoursAfter,
+                    'persentase_sebelum' => $currentWorkload['persentase'],
+                    'persentase_sesudah' => $percentageAfter,
                     'indikator_sebelum' => $currentWorkload['indikator'],
-                    'indikator_sesudah' => $indikatorSesudah,
+                    'indikator_sesudah' => $this->determineIndicator($percentageAfter),
                     'jumlah_penugasan_sebelum' => $jumlahSebelum,
                     'jumlah_penugasan_sesudah' => $jumlahSesudah,
-                    'penugasan_bersamaan_sebelum' => $concurrencySebelum,
-                    'penugasan_bersamaan_sesudah' => $concurrencySesudah,
+                    'penugasan_bersamaan_sebelum' => $concurrencyBefore,
+                    'penugasan_bersamaan_sesudah' => $concurrencyAfter,
+                    'hari_melebihi_kapasitas' => $excessDays,
                 ];
             }
 
@@ -711,9 +822,58 @@ class WorkloadService
                 'team_id' => $teamId,
                 'mulai' => $kegiatanMulai->format('Y-m-d'),
                 'selesai' => $kegiatanSelesai->format('Y-m-d'),
-                'bobot' => $bobot,
             ],
             'rows' => $results,
         ];
+    }
+
+    /**
+     * Menambahkan beban jam pada hari kerja dalam rentang tertentu.
+     *
+     * @param  array<string, float>  $dailyLoads
+     * @param  list<string>  $holidays
+     */
+    private function accumulateDailyLoad(
+        array &$dailyLoads,
+        CarbonInterface $start,
+        CarbonInterface $end,
+        CarbonInterface $monthStart,
+        CarbonInterface $monthEnd,
+        float $jamPerHari,
+        array $holidays
+    ): void {
+        if ($start->gt($monthEnd) || $end->lt($monthStart)) {
+            return;
+        }
+
+        $cursor = ($start->gt($monthStart) ? Carbon::parse($start) : Carbon::parse($monthStart))->startOfDay();
+        $limit = ($end->lt($monthEnd) ? Carbon::parse($end) : Carbon::parse($monthEnd))->startOfDay();
+
+        while ($cursor->lte($limit)) {
+            if ($cursor->isWeekday() && ! in_array($cursor->format('Y-m-d'), $holidays, true)) {
+                $key = $cursor->format('Y-m-d');
+                $dailyLoads[$key] = round(($dailyLoads[$key] ?? 0.0) + $jamPerHari, 2);
+            }
+            $cursor->addDay();
+        }
+    }
+
+    /**
+     * Menambah hitungan penugasan bersamaan per tanggal.
+     *
+     * @param  array<int, int>  $dailyCounts
+     */
+    private function countConcurrentDays(array &$dailyCounts, CarbonInterface $start, CarbonInterface $end, CarbonInterface $monthStart, CarbonInterface $monthEnd): void
+    {
+        if ($start->gt($monthEnd) || $end->lt($monthStart)) {
+            return;
+        }
+
+        $clampedStart = $start->gt($monthStart) ? $start : $monthStart;
+        $clampedEnd = $end->lt($monthEnd) ? $end : $monthEnd;
+
+        for ($d = (int) $clampedStart->format('j'); $d <= (int) $clampedEnd->format('j'); $d++) {
+            $dailyCounts[$d]++;
+        }
     }
 }

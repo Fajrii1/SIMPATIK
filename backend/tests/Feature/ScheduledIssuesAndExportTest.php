@@ -153,7 +153,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $issue = $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2026-01-05',
+            'bulan' => '2026-01-05',
             'kendala' => 'Kendala terlambat Fase 5.',
             'pic_id' => $this->pegawaiA->id,
             'tenggat' => '2026-01-20',
@@ -164,7 +164,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $issueWithoutPic = $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2026-01-05',
+            'bulan' => '2026-01-05',
             'kendala' => 'Kendala tanpa PIC Fase 5.',
             'pic_id' => null,
             'tenggat' => '2026-01-20',
@@ -175,7 +175,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2026-01-05',
+            'bulan' => '2026-01-05',
             'kendala' => 'Kendala selesai Fase 5.',
             'pic_id' => $this->pegawaiA->id,
             'tenggat' => '2026-01-20',
@@ -187,7 +187,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2026-01-05',
+            'bulan' => '2026-01-05',
             'kendala' => 'Kendala tanpa tenggat Fase 5.',
             'tenggat' => null,
             'status' => StatusKendala::TERBUKA,
@@ -197,7 +197,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2033-01-05',
+            'bulan' => '2033-01-05',
             'kendala' => 'Kendala masa depan Fase 5.',
             'tenggat' => '2033-12-31',
             'status' => StatusKendala::TERBUKA,
@@ -234,7 +234,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $issue = $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2026-01-05',
+            'bulan' => '2026-01-05',
             'kendala' => 'PIC ketua Fase 5.',
             'pic_id' => $this->ketuaA->id,
             'tenggat' => '2026-01-20',
@@ -265,6 +265,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $assignmentId = $this->postJson("/api/activities/{$activity->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 7,
             'volume' => 50,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
         ])->assertCreated()->json('data.id');
@@ -287,7 +288,6 @@ class ScheduledIssuesAndExportTest extends TestCase
         // Penugasan yang sama diperbarui (bukan ditambah) agar tidak membuat data duplikat.
         $this->putJson("/api/assignments/{$assignmentId}", [
             'peran' => 'Pengawas',
-            'volume' => 51,
         ])->assertOk();
 
         $this->assertReminderNotification(
@@ -315,6 +315,7 @@ class ScheduledIssuesAndExportTest extends TestCase
             $this->postJson("/api/activities/{$activity->id}/assignments", [
                 'user_id' => $this->pegawaiA->id,
                 'peran' => 'Pencacah',
+                'jam_per_hari' => 1,
                 'volume' => 1,
                 'satuan' => SatuanPenugasan::RESPONDEN->value,
             ])->assertCreated();
@@ -331,6 +332,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->postJson("/api/activities/{$third->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 1,
             'volume' => 1,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
         ])->assertCreated();
@@ -363,6 +365,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->postJson("/api/activities/{$activity->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 7,
             'volume' => 50,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
         ])->assertCreated();
@@ -393,6 +396,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->postJson("/api/activities/{$activity->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 7,
             'volume' => 50,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
         ])->assertCreated();
@@ -431,12 +435,14 @@ class ScheduledIssuesAndExportTest extends TestCase
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 7,
                     'volume' => 50,
                     'satuan' => SatuanPenugasan::RESPONDEN->value,
                 ],
                 [
                     'user_id' => $this->pegawaiB->id,
                     'peran' => 'Pencacah',
+                    'jam_per_hari' => 7,
                     'volume' => 50,
                     'satuan' => SatuanPenugasan::RESPONDEN->value,
                 ],
@@ -469,6 +475,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $created = $this->postJson("/api/activities/{$activity->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 1,
             'volume' => 20,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
         ]);
@@ -478,8 +485,8 @@ class ScheduledIssuesAndExportTest extends TestCase
 
         Notification::where('tipe', 'peringatan_jadwal')->delete();
 
-        // Perubahan volume menaikkan beban melewati ambang: ketua diberi tahu.
-        $this->putJson("/api/assignments/{$assignmentId}", ['volume' => 50])->assertOk();
+        // Perubahan jam per hari menaikkan beban melewati kapasitas: ketua diberi tahu.
+        $this->putJson("/api/assignments/{$assignmentId}", ['jam_per_hari' => 7])->assertOk();
 
         $this->assertReminderNotification(
             $this->ketuaA->id,
@@ -488,7 +495,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         );
 
         // Perubahan berikutnya tidak menambah notifikasi karena peringatannya sudah ada.
-        $this->putJson("/api/assignments/{$assignmentId}", ['volume' => 60])->assertOk();
+        $this->putJson("/api/assignments/{$assignmentId}", ['peran' => 'Pengawas'])->assertOk();
 
         $this->assertReminderNotification(
             $this->ketuaA->id,
@@ -510,6 +517,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $created = $this->postJson("/api/activities/{$activity->id}/assignments", [
             'user_id' => $this->pegawaiA->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 7,
             'volume' => 60,
             'satuan' => SatuanPenugasan::RESPONDEN->value,
         ]);
@@ -542,7 +550,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-05',
             'kendala' => 'Ekspor tim A Fase 5.',
             'status' => StatusKendala::TERBUKA,
         ]);
@@ -550,7 +558,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamB->id,
             'pelapor_id' => $this->ketuaB->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-05',
             'kendala' => 'Ekspor tim B Fase 5.',
             'status' => StatusKendala::TERBUKA,
         ]);
@@ -567,12 +575,13 @@ class ScheduledIssuesAndExportTest extends TestCase
         // Ketua tim: ditolak untuk tim yang tidak dipimpinnya.
         $this->get('/api/reports/issues?format=csv&team_id='.$this->teamB->id)->assertForbidden();
 
-        // Admin dan pimpinan: boleh seluruhnya.
+        // Admin boleh seluruhnya.
         Sanctum::actingAs($this->admin);
         $this->get('/api/reports/issues?format=csv&team_id='.$this->teamB->id)->assertOk();
 
+        // Pimpinan tidak berwenang mengekspor.
         Sanctum::actingAs($this->pimpinan);
-        $this->get('/api/reports/issues?format=csv&team_id='.$this->teamB->id)->assertOk();
+        $this->get('/api/reports/issues?format=csv&team_id='.$this->teamB->id)->assertForbidden();
     }
 
     public function test_export_issues_filters_week_team_and_status(): void
@@ -580,7 +589,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-05',
             'kendala' => 'Kendala awal Januari Fase 5.',
             'status' => StatusKendala::TERBUKA,
         ]);
@@ -588,7 +597,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2032-03-02',
+            'bulan' => '2032-03-02',
             'kendala' => 'Kendala Maret selesai Fase 5.',
             'status' => StatusKendala::SELESAI,
             'catatan_penutupan' => 'Selesai.',
@@ -597,7 +606,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamB->id,
             'pelapor_id' => $this->ketuaB->id,
-            'minggu_mulai' => '2032-03-02',
+            'bulan' => '2032-03-02',
             'kendala' => 'Kendala Maret tim B Fase 5.',
             'status' => StatusKendala::SELESAI,
             'catatan_penutupan' => 'Selesai.',
@@ -637,7 +646,7 @@ class ScheduledIssuesAndExportTest extends TestCase
         $this->createIssue([
             'team_id' => $this->teamA->id,
             'pelapor_id' => $this->admin->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-05',
             'kendala' => 'Format ekspor Fase 5.',
             'status' => StatusKendala::TERBUKA,
         ]);
@@ -669,7 +678,7 @@ class ScheduledIssuesAndExportTest extends TestCase
     private function createIssue(array $attributes): WeeklyIssue
     {
         return WeeklyIssue::create(array_merge([
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-05',
             'kendala' => 'Kendala uji Fase 5.',
             'status' => StatusKendala::TERBUKA,
         ], $attributes));
@@ -683,7 +692,6 @@ class ScheduledIssuesAndExportTest extends TestCase
             'team_id' => $this->teamA->id,
             'mulai' => $mulai,
             'selesai' => $selesai,
-            'bobot' => 1.0,
         ]);
     }
 

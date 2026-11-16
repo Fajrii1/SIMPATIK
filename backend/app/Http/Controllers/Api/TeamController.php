@@ -50,7 +50,8 @@ class TeamController extends Controller
             $query->where('ketua_id', $request->integer('ketua_id'));
         }
 
-        $teams = $query->orderBy('nama')->get();
+        $perPage = min(max($request->integer('per_page', 10), 1), 50);
+        $teams = $query->orderBy('nama')->paginate($perPage);
 
         return TeamResource::collection($teams);
     }

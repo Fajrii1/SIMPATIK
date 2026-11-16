@@ -14,8 +14,8 @@ class SettingSeeder extends Seeder
     {
         $settings = [
             [
-                'kunci' => 'ambang_beban_bulanan',
-                'nilai' => '100',
+                'kunci' => 'jam_kerja_per_hari',
+                'nilai' => '7',
             ],
             [
                 'kunci' => 'maks_penugasan_bersamaan',
@@ -38,6 +38,11 @@ class SettingSeeder extends Seeder
         Setting::firstOrCreate(
             ['kunci' => 'pegawai_boleh_isi_kendala'],
             ['nilai' => 'true']
+        );
+
+        Setting::firstOrCreate(
+            ['kunci' => 'hari_libur'],
+            ['nilai' => '[]']
         );
     }
 }

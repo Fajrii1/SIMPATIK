@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Enums\SatuanPenugasan;
 use App\Models\Assignment;
+use App\Models\Setting;
 use App\Models\User;
+use App\Services\WorkloadService;
 use App\Support\PeranPenugasan;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -42,8 +44,9 @@ class UpdateAssignmentRequest extends FormRequest
         return [
             'user_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
             'peran' => ['sometimes', 'required', 'string', 'max:60'],
-            'volume' => ['sometimes', 'required', 'numeric', 'min:0.01'],
-            'satuan' => ['sometimes', 'required', 'string', Rule::in(SatuanPenugasan::values())],
+            'jam_per_hari' => ['sometimes', 'required', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7)],
+            'volume' => ['nullable', 'numeric', 'min:0.01'],
+            'satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
             'mulai' => ['nullable', 'date'],
             'selesai' => ['nullable', 'date'],
         ];
@@ -98,7 +101,11 @@ class UpdateAssignmentRequest extends FormRequest
                 $validator->errors()->add('peran', 'Kegiatan wajib memiliki satu Penanggung Jawab.');
             }
 
-            // 4. Validasi rentang penugasan terhadap periode kegiatan
+            // 4. jam per hari harus kelipatan 0,25.
+            $newJam = $this->has('jam_per_hari') ? (float) $this->input('jam_per_hari') : (float) $assignment->jam_per_hari;
+            $this->validateJamStep($validator, $newJam);
+
+            // 5. Validasi rentang penugasan terhadap periode kegiatan
             $actMulai = Carbon::parse($activity->mulai)->startOfDay();
             $actSelesai = Carbon::parse($activity->selesai)->startOfDay();
 
@@ -121,7 +128,24 @@ class UpdateAssignmentRequest extends FormRequest
             if ($selesai && ($selesai->lt($actMulai) || $selesai->gt($actSelesai))) {
                 $validator->errors()->add('selesai', 'Tanggal selesai penugasan harus berada dalam periode kegiatan ('.$actMulai->format('d/m/Y').' - '.$actSelesai->format('d/m/Y').').');
             }
+
+            // 6. Penugasan wajib memuat minimal satu hari kerja.
+            $effectiveStart = $mulai ?? $actMulai;
+            $effectiveEnd = $selesai ?? $actSelesai;
+
+            if (app(WorkloadService::class)->countWorkdays($effectiveStart, $effectiveEnd) === 0) {
+                $validator->errors()->add('mulai', 'Periode penugasan tidak memuat satu pun hari kerja (Senin-Jumat, di luar hari libur).');
+            }
         });
+    }
+
+    private function validateJamStep(Validator $validator, float $value): void
+    {
+        $steps = $value / 0.25;
+
+        if (abs($steps - round($steps)) > 0.00001) {
+            $validator->errors()->add('jam_per_hari', 'Jam per hari harus berupa kelipatan 0,25.');
+        }
     }
 
     /**
@@ -134,9 +158,12 @@ class UpdateAssignmentRequest extends FormRequest
             'user_id.exists' => 'Pegawai tidak ditemukan.',
             'peran.required' => 'Peran penugasan wajib diisi.',
             'peran.max' => 'Peran penugasan maksimal 60 karakter.',
-            'volume.required' => 'Volume penugasan wajib diisi.',
+            'jam_per_hari.required' => 'Jam per hari wajib diisi.',
+            'jam_per_hari.numeric' => 'Jam per hari harus berupa angka.',
+            'jam_per_hari.min' => 'Jam per hari minimal 0,25 jam.',
+            'jam_per_hari.max' => 'Jam per hari tidak boleh melebihi jam kerja per hari pada pengaturan.',
+            'volume.numeric' => 'Volume penugasan harus berupa angka.',
             'volume.min' => 'Volume penugasan minimal 0.01.',
-            'satuan.required' => 'Satuan penugasan wajib dipilih.',
             'satuan.in' => 'Satuan penugasan tidak valid.',
         ];
     }

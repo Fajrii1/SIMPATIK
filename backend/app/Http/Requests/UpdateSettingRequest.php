@@ -18,12 +18,14 @@ class UpdateSettingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'ambang_beban_bulanan' => ['sometimes', 'numeric', 'min:1', 'max:1000'],
+            'jam_kerja_per_hari' => ['sometimes', 'numeric', 'min:1', 'max:24'],
+            'hari_libur' => ['sometimes', 'array'],
+            'hari_libur.*' => ['date'],
             'maks_penugasan_bersamaan' => ['sometimes', 'integer', 'min:1', 'max:50'],
             'maks_kegiatan_besar_bersamaan' => ['sometimes', 'integer', 'min:1', 'max:50'],
             'pegawai_boleh_isi_kendala' => ['sometimes', 'boolean'],
             'settings' => ['sometimes', 'array'],
-            'settings.*.kunci' => ['required_with:settings', 'string', 'in:ambang_beban_bulanan,maks_penugasan_bersamaan,maks_kegiatan_besar_bersamaan,pegawai_boleh_isi_kendala'],
+            'settings.*.kunci' => ['required_with:settings', 'string', 'in:jam_kerja_per_hari,hari_libur,maks_penugasan_bersamaan,maks_kegiatan_besar_bersamaan,pegawai_boleh_isi_kendala'],
             'settings.*.nilai' => ['required_with:settings'],
         ];
     }
@@ -34,7 +36,9 @@ class UpdateSettingRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'ambang_beban_bulanan.min' => 'Ambang beban bulanan minimal 1.',
+            'jam_kerja_per_hari.min' => 'Jam kerja per hari minimal 1 jam.',
+            'jam_kerja_per_hari.max' => 'Jam kerja per hari maksimal 24 jam.',
+            'hari_libur.*.date' => 'Tanggal hari libur tidak valid.',
             'maks_penugasan_bersamaan.min' => 'Maksimal penugasan bersamaan minimal 1.',
             'maks_kegiatan_besar_bersamaan.min' => 'Maksimal kegiatan besar bersamaan minimal 1.',
             'settings.*.kunci.in' => 'Kunci pengaturan tidak valid.',

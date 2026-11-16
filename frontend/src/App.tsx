@@ -20,8 +20,9 @@ const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   adminOnly?: boolean;
   reportsOnly?: boolean;
+  blockPimpinan?: boolean;
   allowPendingPassword?: boolean;
-}> = ({ children, adminOnly = false, reportsOnly = false, allowPendingPassword = false }) => {
+}> = ({ children, adminOnly = false, reportsOnly = false, blockPimpinan = false, allowPendingPassword = false }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -42,6 +43,10 @@ const ProtectedRoute: React.FC<{
   }
 
   if (adminOnly && user.peran !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  if (blockPimpinan && user.peran === 'pimpinan') {
     return <Navigate to="/" replace />;
   }
 
@@ -79,10 +84,10 @@ export const App: React.FC = () => {
             }
           >
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/activities" element={<ActivitiesPage />} />
+            <Route path="/calendar" element={<ProtectedRoute blockPimpinan><CalendarPage /></ProtectedRoute>} />
+            <Route path="/activities" element={<ProtectedRoute blockPimpinan><ActivitiesPage /></ProtectedRoute>} />
             <Route path="/workload" element={<WorkloadPage />} />
-            <Route path="/issues" element={<IssuesPage />} />
+            <Route path="/issues" element={<ProtectedRoute blockPimpinan><IssuesPage /></ProtectedRoute>} />
             <Route
               path="/reports"
               element={
@@ -91,7 +96,7 @@ export const App: React.FC = () => {
                 </ProtectedRoute>
               }
             />
-            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/notifications" element={<ProtectedRoute blockPimpinan><NotificationsPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProfilePage />} />
 
             {/* Khusus Admin */}

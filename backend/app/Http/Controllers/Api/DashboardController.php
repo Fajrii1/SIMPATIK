@@ -50,12 +50,13 @@ class DashboardController extends Controller
         // 1. BEBAN KERJA PRIBADI (tersedia untuk semua role)
         $personalWorkload = $this->workloadService->calculateMonthlyWorkloadForUser($user->id, $currentMonth);
         $data['beban_kerja_pribadi'] = [
-            'poin' => $personalWorkload['beban'] ?? $personalWorkload['poin'] ?? 0.0,
+            'jam_terpakai' => $personalWorkload['jam_terpakai'],
+            'kapasitas_jam' => $personalWorkload['kapasitas_jam'],
             'persentase' => $personalWorkload['persentase'],
             'indikator' => $personalWorkload['indikator'],
             'jumlah_penugasan' => $personalWorkload['jumlah_penugasan'],
             'penugasan_bersamaan_maks' => $personalWorkload['penugasan_bersamaan_maks'],
-            'ambang_batas' => $this->workloadService->getMonthlyThreshold(),
+            'jam_kerja_per_hari' => $this->workloadService->getDailyWorkHours(),
         ];
 
         // 2. STATISTIK SESUAI ROLE
@@ -134,8 +135,6 @@ class DashboardController extends Controller
             ->get();
 
         $data['penugasan_aktif'] = $myAssignments->map(function ($as) {
-            $bobot = (float) ($as->activity?->bobot ?? 1.00);
-
             return [
                 'id' => $as->id,
                 'kegiatan_id' => $as->activity_id,
@@ -144,9 +143,7 @@ class DashboardController extends Controller
                 'peran' => $as->peran,
                 'mulai' => $as->getEffectiveMulai()?->toDateString(),
                 'selesai' => $as->getEffectiveSelesai()?->toDateString(),
-                // Poin penugasan = volume x bobot kegiatan, sama dengan AssignmentResource
-                // dan poin_total pada WorkloadController::userDetail.
-                'poin' => round((float) $as->volume * $bobot, 2),
+                'jam_per_hari' => (float) $as->jam_per_hari,
                 'status_kegiatan' => $as->activity?->status,
             ];
         });

@@ -22,13 +22,13 @@ export interface Activity {
   team?: { id: number; nama: string };
   mulai: string;
   selesai: string;
-  bobot: number;
   kegiatan_besar: boolean;
   selesai_manual: boolean;
   selesai_pada?: string;
   status: 'Belum Mulai' | 'Berjalan' | 'Selesai' | 'Terlambat';
   keterangan?: string;
   assignments_count?: number;
+  assignments?: Assignment[];
 }
 
 export interface Assignment {
@@ -36,14 +36,13 @@ export interface Assignment {
   activity_id: number;
   user_id: number;
   peran: string;
+  jam_per_hari?: number | null;
   volume?: number | null;
   satuan?: string | null;
   mulai?: string;
   selesai?: string;
   effective_mulai: string;
   effective_selesai: string;
-  poin_total?: number | null;
-  poin_beban?: number | null;
   metrics_visible?: boolean;
   user?: User;
   activity?: Activity;
@@ -70,7 +69,7 @@ export interface WeeklyIssue {
   pelapor?: User;
   pic_id?: number;
   pic?: User;
-  minggu_mulai: string;
+  bulan: string;
   kendala: string;
   solusi?: string;
   tindak_lanjut?: string;
@@ -123,7 +122,59 @@ export interface AuditLogItem {
   created_at: string;
 }
 
+export interface PageMeta {
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  from: number | null;
+  to: number | null;
+}
+
+export interface PageLinks {
+  prev: string | null;
+  next: string | null;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: PageMeta;
+  links?: PageLinks;
+}
+
 export interface WorkloadSummary {
+  user: {
+    id: number;
+    nama: string;
+    nip: string;
+    email: string;
+    peran: Role;
+    teams: { id: number; nama: string }[];
+  };
+  bulan: string;
+  jam_terpakai: number;
+  kapasitas_jam: number;
+  persentase: number;
+  indikator: 'aman' | 'hampir_penuh' | 'melebihi';
+  jumlah_penugasan: number;
+  penugasan_bersamaan_maks: number;
+}
+
+export interface WorkloadAssignmentRow {
+  assignment_id: number;
+  activity_id: number;
+  kegiatan: string;
+  tim: string | null;
+  peran: string;
+  mulai: string;
+  selesai: string;
+  jam_per_hari: number | null;
+  hari_kerja: number;
+  jam_terpakai: number | null;
+  metrics_visible: boolean;
+}
+
+export interface WorkloadDetail {
   user: {
     id: number;
     nama: string;
@@ -133,15 +184,21 @@ export interface WorkloadSummary {
     teams: string[];
   };
   bulan: string;
-  poin: number;
+  jam_terpakai: number;
+  kapasitas_jam: number;
   persentase: number;
   indikator: 'aman' | 'hampir_penuh' | 'melebihi';
-  jumlah_penugasan: number;
-  penugasan_bersamaan_maks: number;
+  jam_kerja_per_hari: number;
+  penugasan: WorkloadAssignmentRow[];
+  penugasan_meta: PageMeta;
 }
 
 export interface WorkloadWarning {
-  jenis: 'beban' | 'penugasan_bersamaan' | 'kegiatan_besar_bersamaan';
+  jenis:
+    | 'beban'
+    | 'melebihi_kapasitas_harian'
+    | 'penugasan_bersamaan'
+    | 'kegiatan_besar_bersamaan';
   tipe: string;
   tingkat_risiko: 'rendah' | 'sedang' | 'tinggi';
   pegawai_id: number | null;
@@ -157,7 +214,10 @@ export interface WorkloadWarning {
 
 export interface AssignmentPreviewMonthlyImpact {
   bulan: string;
-  tambahan_poin: number;
+  tambahan_jam: number;
+  hari_kerja: number;
+  jam_terpakai: number;
+  kapasitas_jam: number;
   beban_sebelum: number;
   beban_sesudah: number;
   persentase_sebelum: number;
@@ -168,27 +228,30 @@ export interface AssignmentPreviewMonthlyImpact {
   jumlah_penugasan_sesudah: number;
   penugasan_bersamaan_sebelum: number;
   penugasan_bersamaan_sesudah: number;
+  hari_melebihi_kapasitas: { tanggal: string; jam: number }[];
 }
 
 export interface AssignmentPreviewResult {
   pegawai: { id: number; nama: string };
-  kegiatan: { id: number; nama: string; bobot: number; kegiatan_besar: boolean };
+  kegiatan: { id: number; nama: string; kegiatan_besar: boolean };
   rencana: {
     peran: string;
-    volume: number;
-    satuan: string;
+    jam_per_hari: number;
+    volume: number | null;
+    satuan: string | null;
     mulai: string;
     selesai: string;
-    total_poin: number;
+    total_jam: number;
   };
   dampak_bulanan: AssignmentPreviewMonthlyImpact[];
   peringatan: { jenis: string; bulan: string; pesan: string }[];
-  melebihi_ambang: boolean;
+  melebihi_kapasitas_harian: boolean;
 }
 
 export interface PreviewBatchImpactRow {
   bulan: string;
-  tambahan_poin: number;
+  tambahan_jam: number;
+  kapasitas_jam: number;
   beban_sebelum: number;
   beban_sesudah: number;
   persentase_sebelum: number;
@@ -199,6 +262,7 @@ export interface PreviewBatchImpactRow {
   jumlah_penugasan_sesudah: number;
   penugasan_bersamaan_sebelum: number;
   penugasan_bersamaan_sesudah: number;
+  hari_melebihi_kapasitas: { tanggal: string; jam: number }[];
 }
 
 export interface PreviewBatchPegawaiResult {
@@ -209,6 +273,14 @@ export interface PreviewBatchPegawaiResult {
 }
 
 export interface PreviewBatchResponse {
-  kegiatan: { team_id: number; mulai: string; selesai: string; bobot: number };
+  kegiatan: { team_id: number; mulai: string; selesai: string };
   rows: PreviewBatchPegawaiResult[];
+}
+
+export interface SettingsValues {
+  jam_kerja_per_hari: number;
+  hari_libur: string[];
+  maks_penugasan_bersamaan: number;
+  maks_kegiatan_besar_bersamaan: number;
+  pegawai_boleh_isi_kendala: boolean;
 }

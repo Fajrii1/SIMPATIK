@@ -1,19 +1,40 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import {
-  TrendingUp,
   AlertTriangle,
   Search,
   Loader2,
   ChevronRight,
-  ShieldAlert,
   X,
 } from 'lucide-react';
-import { WorkloadSummary, WorkloadWarning, Team } from '../types';
+import {
+  WorkloadSummary,
+  WorkloadWarning,
+  WorkloadDetail,
+  Team,
+  PageMeta,
+} from '../types';
+import { Pagination } from '../components/Pagination';
+
+const indikatorLabel = (indikator: string): string => {
+  if (indikator === 'aman') return 'Aman';
+  if (indikator === 'hampir_penuh') return 'Hampir Penuh';
+  return 'Melebihi';
+};
+
+const indikatorBadge = (indikator: string): string => {
+  if (indikator === 'aman') return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+  if (indikator === 'hampir_penuh') return 'bg-amber-50 text-amber-700 border border-amber-200';
+  return 'bg-rose-50 text-rose-700 border border-rose-200';
+};
+
+const barColor = (persentase: number): string => {
+  if (persentase >= 100) return 'bg-rose-500';
+  if (persentase >= 80) return 'bg-amber-500';
+  return 'bg-sky-500';
+};
 
 export const WorkloadPage: React.FC = () => {
-  const { user } = useAuth();
   const [month, setMonth] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -21,36 +42,41 @@ export const WorkloadPage: React.FC = () => {
   const [teamId, setTeamId] = useState<string>('');
   const [teams, setTeams] = useState<Team[]>([]);
   const [workloads, setWorkloads] = useState<WorkloadSummary[]>([]);
-  const [summary, setSummary] = useState<any>(null);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
+  const [page, setPage] = useState(1);
   const [warnings, setWarnings] = useState<WorkloadWarning[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
 
-  // Selected User Detail Modal
+  // Modal rincian pegawai
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [userDetail, setUserDetail] = useState<any>(null);
+  const [userDetail, setUserDetail] = useState<WorkloadDetail | null>(null);
+  const [detailPage, setDetailPage] = useState(1);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const fetchWorkload = async () => {
+  const fetchWorkload = useCallback(async () => {
     setLoading(true);
     try {
       const [wlRes, warnRes] = await Promise.all([
-        api.get('/workload', { params: { month, team_id: teamId || undefined } }),
+        api.get('/workload', {
+          params: { month, team_id: teamId || undefined, search: search || undefined, page },
+        }),
         api.get('/workload/warnings', { params: { month, team_id: teamId || undefined } }),
       ]);
       setWorkloads(wlRes.data.data || []);
-      setSummary(wlRes.data.ringkasan || null);
+      setMeta(wlRes.data.meta || null);
       setWarnings(warnRes.data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [month, teamId, search, page]);
 
   const fetchTeams = async () => {
     try {
-      const res = await api.get('/teams');
+      const res = await api.get('/teams', { params: { per_page: 50 } });
       setTeams(res.data.data || []);
     } catch (err) {
       console.error(err);
@@ -63,26 +89,47 @@ export const WorkloadPage: React.FC = () => {
 
   useEffect(() => {
     fetchWorkload();
-  }, [month, teamId]);
+  }, [fetchWorkload]);
 
-  const handleOpenDetail = async (targetId: number) => {
+  // Pencarian sisi server dengan penundaan singkat.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPage(1);
+      setSearch(searchInput.trim());
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  const fetchDetail = useCallback(
+    async (targetId: number, targetPage: number) => {
+      setDetailLoading(true);
+      try {
+        const res = await api.get(`/workload/users/${targetId}`, {
+          params: { month, page: targetPage },
+        });
+        setUserDetail(res.data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [month]
+  );
+
+  const handleOpenDetail = (targetId: number) => {
     setSelectedUserId(targetId);
-    setDetailLoading(true);
-    try {
-      const res = await api.get(`/workload/users/${targetId}`);
-      setUserDetail(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDetailLoading(false);
-    }
+    setUserDetail(null);
+    setDetailPage(1);
+    fetchDetail(targetId, 1);
   };
 
-  const filteredWorkloads = workloads.filter(
-    (w) =>
-      w.user.nama.toLowerCase().includes(search.toLowerCase()) ||
-      w.user.nip.includes(search)
-  );
+  const handleDetailPageChange = (targetPage: number) => {
+    if (!selectedUserId) return;
+    setDetailPage(targetPage);
+    fetchDetail(selectedUserId, targetPage);
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -91,40 +138,21 @@ export const WorkloadPage: React.FC = () => {
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-slate-900">Monitoring Beban Kerja Pegawai</h1>
           <p className="text-xs sm:text-sm text-slate-500">
-            Perhitungan matematis beban bulanan dan deteksi benturan tugas secara real-time
+            Perhitungan beban jam kerja bulanan dan deteksi benturan tugas secara real-time
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <input
             type="month"
             value={month}
-            onChange={(e) => setMonth(e.target.value)}
+            onChange={(e) => {
+              setMonth(e.target.value);
+              setPage(1);
+            }}
             className="text-xs sm:text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white font-medium text-slate-700 shadow-xs focus:ring-2 focus:ring-sky-600 min-h-[40px]"
           />
         </div>
       </div>
-
-      {/* Summary Stat Cards */}
-      {summary && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">Pegawai Dipantau</p>
-            <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">{summary.total_pegawai} orang</p>
-          </div>
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">Rata-Rata Beban</p>
-            <p className="text-xl sm:text-2xl font-bold text-sky-700 mt-1">{summary.rata_rata_poin} pt</p>
-          </div>
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">Hampir Penuh (80-99%)</p>
-            <p className="text-xl sm:text-2xl font-bold text-amber-600 mt-1">{summary.pegawai_hampir_penuh} orang</p>
-          </div>
-          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">Melebihi Ambang (≥100%)</p>
-            <p className="text-xl sm:text-2xl font-bold text-rose-600 mt-1">{summary.pegawai_melebihi_beban} orang</p>
-          </div>
-        </div>
-      )}
 
       {/* Warnings Banner */}
       {warnings.length > 0 && (
@@ -172,15 +200,18 @@ export const WorkloadPage: React.FC = () => {
           <input
             type="text"
             placeholder="Cari nama pegawai atau NIP..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-sky-600 min-h-[40px]"
           />
         </div>
 
         <select
           value={teamId}
-          onChange={(e) => setTeamId(e.target.value)}
+          onChange={(e) => {
+            setTeamId(e.target.value);
+            setPage(1);
+          }}
           className="text-xs sm:text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-sky-600 min-h-[40px] sm:w-60"
         >
           <option value="">Semua Tim Kerja</option>
@@ -196,7 +227,7 @@ export const WorkloadPage: React.FC = () => {
           <div className="py-16 flex justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
           </div>
-        ) : filteredWorkloads.length === 0 ? (
+        ) : workloads.length === 0 ? (
           <div className="py-16 text-center text-slate-500 text-sm">
             Tidak ada data beban kerja yang cocok dengan kriteria pencarian.
           </div>
@@ -209,77 +240,33 @@ export const WorkloadPage: React.FC = () => {
                   <tr>
                     <th className="py-3 px-4">Nama Pegawai / NIP</th>
                     <th className="py-3 px-4">Tim Kerja</th>
-                    <th className="py-3 px-4">Poin Beban</th>
                     <th className="py-3 px-4">Persentase</th>
-                    <th className="py-3 px-4">Status Indikator</th>
-                    <th className="py-3 px-4">Total Tugas</th>
-                    <th className="py-3 px-4">Puncak Bersamaan</th>
-                    <th className="py-3 px-4 text-right">Rincian</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredWorkloads.map((item) => (
+                  {workloads.map((item) => (
                     <tr key={item.user.id} className="hover:bg-slate-50/70 transition">
                       <td className="py-3 px-4">
                         <p className="font-semibold text-slate-900">{item.user.nama}</p>
                         <p className="text-xs text-slate-400 font-mono">{item.user.nip}</p>
                       </td>
                       <td className="py-3 px-4 text-xs text-slate-600">
-                        {item.user.teams.length > 0 ? item.user.teams.join(', ') : '-'}
+                        {item.user.teams.length > 0 ? item.user.teams.map((t) => t.nama).join(', ') : '-'}
                       </td>
-                      <td className="py-3 px-4 font-bold text-slate-800 whitespace-nowrap">{item.poin} pt</td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetail(item.user.id)}
+                          className="inline-flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 transition"
+                          title="Lihat rincian kegiatan"
+                        >
                           <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden">
                             <div
-                              className={`h-full ${
-                                item.persentase >= 100
-                                  ? 'bg-rose-500'
-                                  : item.persentase >= 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-sky-500'
-                              }`}
+                              className={`h-full ${barColor(item.persentase)}`}
                               style={{ width: `${Math.min(item.persentase, 100)}%` }}
                             />
                           </div>
-                          <span className="text-xs font-medium text-slate-700">{item.persentase}%</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`text-xs px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap ${
-                            item.indikator === 'aman'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : item.indikator === 'hampir_penuh'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200'
-                          }`}
-                        >
-                          {item.indikator === 'aman'
-                            ? 'Aman'
-                            : item.indikator === 'hampir_penuh'
-                            ? 'Hampir Penuh'
-                            : 'Melebihi'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{item.jumlah_penugasan} tugas</td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`font-semibold ${
-                            item.penugasan_bersamaan_maks >= 3 ? 'text-amber-600' : 'text-slate-700'
-                          }`}
-                        >
-                          {item.penugasan_bersamaan_maks} tugas
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => handleOpenDetail(item.user.id)}
-                          className="p-2 text-slate-400 hover:text-sky-600 hover:bg-slate-100 rounded-lg transition min-h-[36px] min-w-[36px] inline-flex items-center justify-center"
-                          title="Lihat Rincian Tugas"
-                          aria-label="Lihat Rincian Tugas"
-                        >
-                          <ChevronRight className="w-4 h-4" />
+                          <span className="text-xs font-medium text-sky-700 underline">{item.persentase}%</span>
                         </button>
                       </td>
                     </tr>
@@ -290,44 +277,30 @@ export const WorkloadPage: React.FC = () => {
 
             {/* Mobile Card Stack (<640px) */}
             <div className="sm:hidden divide-y divide-slate-100">
-              {filteredWorkloads.map((item) => (
+              {workloads.map((item) => (
                 <div key={item.user.id} className="p-4 space-y-2.5">
-                  <div className="flex justify-between items-start gap-2">
-                    <div>
-                      <p className="font-semibold text-slate-900 text-sm">{item.user.nama}</p>
-                      <p className="text-xs text-slate-400 font-mono">{item.user.nip}</p>
-                    </div>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        item.indikator === 'aman'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : item.indikator === 'hampir_penuh'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}
-                    >
-                      {item.indikator === 'aman' ? 'Aman' : item.indikator === 'hampir_penuh' ? 'Hampir' : 'Lebih'}
-                    </span>
+                  <div>
+                    <p className="font-semibold text-slate-900 text-sm">{item.user.nama}</p>
+                    <p className="text-xs text-slate-400 font-mono">{item.user.nip}</p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      {item.user.teams.length > 0 ? item.user.teams.map((t) => t.nama).join(', ') : '-'}
+                    </p>
                   </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-600">
-                    <span>Total Poin: <strong className="text-slate-900">{item.poin} pt</strong> ({item.persentase}%)</span>
-                    <span>Puncak: <strong className="text-slate-900">{item.penugasan_bersamaan_maks}</strong> tugas/hari</span>
-                  </div>
-
-                  <div className="flex justify-end pt-1">
-                    <button
-                      onClick={() => handleOpenDetail(item.user.id)}
-                      className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 min-h-[36px]"
-                    >
-                      Rincian Lengkap <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenDetail(item.user.id)}
+                    className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 min-h-[36px]"
+                  >
+                    Persentase: {item.persentase}% (lihat rincian)
+                  </button>
                 </div>
               ))}
             </div>
           </>
         )}
+        <div className="px-4 pb-3">
+          <Pagination meta={meta} onPageChange={setPage} disabled={loading} label="pegawai" />
+        </div>
       </div>
 
       {/* Modal Detail Pegawai */}
@@ -348,65 +321,74 @@ export const WorkloadPage: React.FC = () => {
               </button>
             </div>
 
-            {detailLoading ? (
+            {detailLoading && !userDetail ? (
               <div className="py-12 flex justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
               </div>
             ) : (
               <div className="overflow-y-auto space-y-5 flex-1 pr-1">
-                {/* Tren 5 Bulan */}
-                <div>
-                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Tren Beban Kerja Multi-Bulan
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
-                    {userDetail?.tren_bulanan?.map((t: any) => (
-                      <div key={t.bulan} className="p-2 sm:p-2.5 rounded-lg border border-slate-100 bg-slate-50">
-                        <p className="font-semibold text-slate-600 text-[11px]">{t.bulan}</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">{t.poin} pt</p>
-                        <p className="text-[10px] text-slate-500">{t.persentase}%</p>
-                      </div>
-                    ))}
+                {/* Ringkasan jam bulan terpilih */}
+                {userDetail && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
+                      <p className="text-[10px] text-slate-500 font-medium">Jam Terpakai</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">{userDetail.jam_terpakai} jam</p>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
+                      <p className="text-[10px] text-slate-500 font-medium">Kapasitas</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">{userDetail.kapasitas_jam} jam</p>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
+                      <p className="text-[10px] text-slate-500 font-medium">Persentase</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">{userDetail.persentase}%</p>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50">
+                      <p className="text-[10px] text-slate-500 font-medium">Jam Kerja/Hari</p>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">{userDetail.jam_kerja_per_hari} jam</p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Rincian Penugasan */}
                 <div>
                   <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Daftar Penugasan Aktif & Periode Terkait
+                    Daftar Penugasan Bulan Ini
                   </h3>
                   {userDetail?.penugasan?.length === 0 ? (
-                    <p className="text-xs text-slate-400 py-3">Tidak ada penugasan tercatat.</p>
+                    <p className="text-xs text-slate-400 py-3">Tidak ada penugasan tercatat pada bulan ini.</p>
                   ) : (
                     <div className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden">
-                      {userDetail?.penugasan?.map((as: any) => (
-                        <div key={as.id} className="p-3 text-xs flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 bg-white">
+                      {userDetail?.penugasan?.map((as) => (
+                        <div key={as.assignment_id} className="p-3 text-xs flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 bg-white">
                           <div>
                             <p className="font-semibold text-slate-800">{as.kegiatan}</p>
-                            {as.metrics_visible === false ? (
-                              <p className="text-slate-500 mt-0.5">
-                                {as.tim} • Peran: <span className="font-medium text-slate-700">{as.peran}</span>
-                              </p>
-                            ) : (
-                              <p className="text-slate-500 mt-0.5">
-                                {as.tim} • Peran: <span className="font-medium text-slate-700">{as.peran}</span> • Vol: {as.volume} {as.satuan}
-                              </p>
-                            )}
+                            <p className="text-slate-500 mt-0.5">
+                              {as.tim || '-'} • Peran: <span className="font-medium text-slate-700">{as.peran}</span>
+                            </p>
                             <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                              {as.tanggal_mulai} s.d. {as.tanggal_selesai}
+                              {as.mulai} s.d. {as.selesai} • {as.hari_kerja} hari kerja
                             </p>
                           </div>
                           <div className="sm:text-right shrink-0">
-                            {as.metrics_visible === false ? (
-                              <span className="text-slate-400">—</span>
+                            {as.metrics_visible && as.jam_per_hari !== null ? (
+                              <>
+                                <p className="font-bold text-sky-700">{as.jam_terpakai} jam total</p>
+                                <p className="text-[11px] text-slate-500">{as.jam_per_hari} jam/hari</p>
+                              </>
                             ) : (
-                              <span className="font-bold text-sky-700">{as.poin_total} pt total</span>
+                              <span className="text-slate-400">—</span>
                             )}
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
+                  <Pagination
+                    meta={userDetail?.penugasan_meta}
+                    onPageChange={handleDetailPageChange}
+                    disabled={detailLoading}
+                    label="penugasan"
+                  />
                 </div>
               </div>
             )}

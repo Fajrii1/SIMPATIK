@@ -87,7 +87,6 @@ class RemainingModulesTest extends TestCase
                 'jenis' => JenisKegiatan::SURVEI,
                 'mulai' => Carbon::now()->startOfMonth()->toDateString(),
                 'selesai' => Carbon::now()->endOfMonth()->toDateString(),
-                'bobot' => 1.5,
                 'keterangan' => 'Pengujian',
             ]
         );
@@ -119,9 +118,9 @@ class RemainingModulesTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'bulan',
-                'ambang_batas',
-                'ringkasan',
+                'jam_kerja_per_hari',
                 'data',
+                'meta',
             ]);
 
         // Test workload user detail
@@ -129,9 +128,11 @@ class RemainingModulesTest extends TestCase
         $detailRes->assertOk()
             ->assertJsonStructure([
                 'user',
-                'ambang_batas',
-                'tren_bulanan',
+                'bulan',
+                'jam_terpakai',
+                'kapasitas_jam',
                 'penugasan',
+                'penugasan_meta',
             ]);
 
         // Test workload warnings
@@ -153,7 +154,7 @@ class RemainingModulesTest extends TestCase
         $res = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
             'activity_id' => $this->activity->id,
-            'minggu_mulai' => $monday,
+            'bulan' => $monday,
             'kendala' => 'Kuesioner rusak terkena air hujan di lapangan',
             'solusi' => 'Mencetak ulang formulir cadangan',
             'pic_id' => $this->pegawai->id,
@@ -206,7 +207,7 @@ class RemainingModulesTest extends TestCase
             // Tim sendiri tetap boleh
             $allowed = $this->postJson('/api/issues', [
                 'team_id' => $this->team->id,
-                'minggu_mulai' => $monday,
+                'bulan' => $monday,
                 'kendala' => 'Kendala tim sendiri saat pengaturan mengizinkan.',
             ]);
             $allowed->assertCreated();
@@ -215,7 +216,7 @@ class RemainingModulesTest extends TestCase
             // Tim lain harus ditolak walau pengaturan mengizinkan pegawai mengisi kendala
             $this->postJson('/api/issues', [
                 'team_id' => $outsideTeam->id,
-                'minggu_mulai' => $monday,
+                'bulan' => $monday,
                 'kendala' => 'Percobaan kendala tim lain.',
             ])->assertForbidden();
         } finally {
@@ -276,7 +277,7 @@ class RemainingModulesTest extends TestCase
 
         $this->getJson("/api/reports/activities?format=csv&team_id={$otherTeam->id}")->assertForbidden();
 
-        // Pimpinan memiliki akses seluruh kantor
+        // Pimpinan tidak berwenang mengekspor laporan.
         $pimpinan = User::firstOrCreate(
             ['email' => 'pimpinan_export_rm@contoh.test'],
             [
@@ -291,8 +292,8 @@ class RemainingModulesTest extends TestCase
         );
 
         Sanctum::actingAs($pimpinan);
-        $this->getJson('/api/reports/activities?format=csv')->assertOk();
-        $this->getJson("/api/reports/activities?format=csv&team_id={$otherTeam->id}")->assertOk();
+        $this->getJson('/api/reports/activities?format=csv')->assertForbidden();
+        $this->getJson("/api/reports/activities?format=csv&team_id={$otherTeam->id}")->assertForbidden();
     }
 
     /**
@@ -305,7 +306,7 @@ class RemainingModulesTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => $monday,
+            'bulan' => $monday,
             'kendala' => 'Kendala untuk uji catatan penutupan wajib.',
         ]);
         $created->assertCreated();
@@ -341,7 +342,7 @@ class RemainingModulesTest extends TestCase
 
         $response = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => $monday,
+            'bulan' => $monday,
             'kendala' => 'Kendala dilaporkan anggota tim saat pengaturan bawaan aktif.',
         ]);
 
@@ -372,7 +373,7 @@ class RemainingModulesTest extends TestCase
 
         $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => $monday,
+            'bulan' => $monday,
             'kendala' => 'Percobaan kendala oleh pimpinan nonanggota.',
         ])->assertForbidden();
     }

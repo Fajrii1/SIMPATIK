@@ -63,25 +63,21 @@ class StabilizationRegressionTest extends TestCase
     public function test_user_detail_includes_assignment_spanning_the_whole_window(): void
     {
         $activity = $this->makeActivity('Membentang Jendela', '2033-12-01', '2034-04-30');
-        $assignment = $this->makeAssignment($activity, $this->pegawai, 20);
+        $assignment = $this->makeAssignment($activity, $this->pegawai, 2);
 
         Sanctum::actingAs($this->admin);
-        $response = $this->getJson("/api/workload/users/{$this->pegawai->id}?from=2034-01&to=2034-03");
+        $response = $this->getJson("/api/workload/users/{$this->pegawai->id}?month=2034-02&per_page=50");
 
         $response->assertOk();
 
-        $row = collect($response->json('penugasan'))->firstWhere('id', $assignment->id);
+        $row = collect($response->json('penugasan'))->firstWhere('assignment_id', $assignment->id);
         $this->assertNotNull($row, 'Penugasan yang membentang melewati jendela harus tetap muncul.');
-        $this->assertSame('2033-12-01', $row['tanggal_mulai']);
-        $this->assertSame('2034-04-30', $row['tanggal_selesai']);
+        $this->assertSame('2033-12-01', $row['mulai']);
+        $this->assertSame('2034-04-30', $row['selesai']);
+        $this->assertSame(2.0, (float) $row['jam_per_hari']);
 
-        // Konsisten dengan tren bulanan: setiap bulan jendela memuat poin.
-        foreach (['2034-01', '2034-02', '2034-03'] as $month) {
-            $history = collect($response->json('tren_bulanan'))->firstWhere('bulan', $month);
-            $this->assertNotNull($history);
-            $this->assertGreaterThan(0, (float) $history['poin']);
-            $this->assertSame(1, $history['jumlah_penugasan']);
-        }
+        // Beban bulan yang dipilih ikut menghitung penugasan yang membentang.
+        $this->assertGreaterThan(0.0, (float) $response->json('jam_terpakai'));
     }
 
     /**
@@ -90,32 +86,31 @@ class StabilizationRegressionTest extends TestCase
     public function test_user_detail_skips_assignments_from_soft_deleted_activity(): void
     {
         $activity = $this->makeActivity('Dihapus', '2034-02-01', '2034-02-28');
-        $assignment = $this->makeAssignment($activity, $this->pegawai, 10, '2034-02-05', '2034-02-10');
+        $assignment = $this->makeAssignment($activity, $this->pegawai, 2, '2034-02-05', '2034-02-10');
         $activity->delete();
 
         Sanctum::actingAs($this->admin);
-        $response = $this->getJson("/api/workload/users/{$this->pegawai->id}?from=2034-01&to=2034-03");
+        $response = $this->getJson("/api/workload/users/{$this->pegawai->id}?month=2034-02");
 
         $response->assertOk();
         $this->assertNull(
-            collect($response->json('penugasan'))->firstWhere('id', $assignment->id),
+            collect($response->json('penugasan'))->firstWhere('assignment_id', $assignment->id),
             'Penugasan dari kegiatan terhapus tidak boleh tampil.'
         );
     }
 
     /**
-     * Poin pada agenda dashboard sama dengan volume x bobot kegiatan.
+     * Jam per hari pada agenda dashboard sama dengan data penugasan.
      */
-    public function test_dashboard_active_assignment_points_equal_volume_times_weight(): void
+    public function test_dashboard_active_assignment_hours_match_assignment(): void
     {
         $today = Carbon::today();
         $activity = $this->makeActivity(
             'Agenda Dashboard',
             $today->copy()->subDays(3)->toDateString(),
-            $today->copy()->addDays(3)->toDateString(),
-            2.0
+            $today->copy()->addDays(3)->toDateString()
         );
-        $assignment = $this->makeAssignment($activity, $this->pegawai, 12.5);
+        $assignment = $this->makeAssignment($activity, $this->pegawai, 4);
 
         Sanctum::actingAs($this->pegawai);
         $response = $this->getJson('/api/dashboard');
@@ -124,8 +119,7 @@ class StabilizationRegressionTest extends TestCase
         $row = collect($response->json('data.penugasan_aktif'))->firstWhere('id', $assignment->id);
 
         $this->assertNotNull($row);
-        $this->assertEqualsWithDelta(25.0, (float) $row['poin'], 0.001);
-        $this->assertNotEquals(0.0, (float) $row['poin']);
+        $this->assertEqualsWithDelta(4.0, (float) $row['jam_per_hari'], 0.001);
     }
 
     /**
@@ -193,12 +187,11 @@ class StabilizationRegressionTest extends TestCase
      */
     public function test_activity_assignment_metrics_visibility_by_role(): void
     {
-        $activity = $this->makeActivity('Visibilitas Metrik', '2035-06-01', '2035-06-30', 1.5);
-        $this->makeAssignment($activity, $this->pegawai, 10);
+        $activity = $this->makeActivity('Visibilitas Metrik', '2035-06-01', '2035-06-30');
+        $this->makeAssignment($activity, $this->pegawai, 2);
 
         $expectedVisible = [
             'admin' => $this->admin,
-            'pimpinan' => $this->pimpinan,
             'ketua' => $this->ketua,
             'pemilik' => $this->pegawai,
         ];
@@ -211,10 +204,14 @@ class StabilizationRegressionTest extends TestCase
             $assignment = $response->json('data.assignments.0');
             $this->assertNotNull($assignment, "Penugasan harus tampil untuk {$label}.");
             $this->assertTrue($assignment['metrics_visible'], "Metrik harus terlihat oleh {$label}.");
+            $this->assertEqualsWithDelta(2.0, (float) $assignment['jam_per_hari'], 0.001);
             $this->assertEqualsWithDelta(10.0, (float) $assignment['volume'], 0.001);
             $this->assertSame('Dokumen', $assignment['satuan']);
-            $this->assertEqualsWithDelta(15.0, (float) $assignment['poin_total'], 0.001);
         }
+
+        // Pimpinan hanya memantau dashboard dan monitoring, tidak membuka kegiatan.
+        Sanctum::actingAs($this->pimpinan);
+        $this->getJson("/api/activities/{$activity->id}")->assertForbidden();
 
         // Pegawai lain (bukan pemilik, bukan ketua tim kegiatan) tidak melihat metrik.
         Sanctum::actingAs($this->rekan);
@@ -223,9 +220,9 @@ class StabilizationRegressionTest extends TestCase
         $detail->assertOk();
         $assignment = $detail->json('data.assignments.0');
         $this->assertFalse($assignment['metrics_visible']);
+        $this->assertNull($assignment['jam_per_hari']);
         $this->assertNull($assignment['volume']);
         $this->assertNull($assignment['satuan']);
-        $this->assertNull($assignment['poin_total']);
 
         $list = $this->getJson('/api/activities');
         $list->assertOk();
@@ -253,8 +250,7 @@ class StabilizationRegressionTest extends TestCase
     private function makeActivity(
         string $label,
         string $mulai,
-        string $selesai,
-        float $bobot = 1.0
+        string $selesai
     ): Activity {
         return Activity::create([
             'nama' => "Kegiatan {$label}",
@@ -262,7 +258,6 @@ class StabilizationRegressionTest extends TestCase
             'team_id' => $this->team->id,
             'mulai' => $mulai,
             'selesai' => $selesai,
-            'bobot' => $bobot,
             'kegiatan_besar' => false,
         ]);
     }
@@ -270,7 +265,7 @@ class StabilizationRegressionTest extends TestCase
     private function makeAssignment(
         Activity $activity,
         User $user,
-        float $volume,
+        float $jamPerHari = 2.0,
         ?string $mulai = null,
         ?string $selesai = null
     ): Assignment {
@@ -278,7 +273,8 @@ class StabilizationRegressionTest extends TestCase
             'activity_id' => $activity->id,
             'user_id' => $user->id,
             'peran' => 'Anggota',
-            'volume' => $volume,
+            'jam_per_hari' => $jamPerHari,
+            'volume' => 10,
             'satuan' => SatuanPenugasan::DOKUMEN->value,
             'mulai' => $mulai,
             'selesai' => $selesai,

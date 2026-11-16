@@ -163,6 +163,7 @@ class ActivityFormAndVisibilityTest extends TestCase
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Pencacah',
+                    'jam_per_hari' => 2,
                     'volume' => 5,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -187,12 +188,14 @@ class ActivityFormAndVisibilityTest extends TestCase
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 5,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
                 [
                     'user_id' => $this->ketuaA->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 5,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -213,12 +216,14 @@ class ActivityFormAndVisibilityTest extends TestCase
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 10,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
                 [
                     'user_id' => $this->ketuaA->id,
                     'peran' => 'Pencacah',
+                    'jam_per_hari' => 2,
                     'volume' => 5,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -245,6 +250,7 @@ class ActivityFormAndVisibilityTest extends TestCase
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 10,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -265,11 +271,11 @@ class ActivityFormAndVisibilityTest extends TestCase
             'team_id' => $this->teamA->id,
             'mulai' => '2032-03-01',
             'selesai' => '2032-03-20',
-            'bobot' => 1.5,
             'assignments' => [
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Pencacah',
+                    'jam_per_hari' => 2,
                     'volume' => 10,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -306,11 +312,10 @@ class ActivityFormAndVisibilityTest extends TestCase
             $this->teamA,
             'Kegiatan Eksisting Batch Fase 6',
             '2032-08-01',
-            '2032-08-31',
-            1.25
+            '2032-08-31'
         );
 
-        $this->createAssignment($existingActivity, $this->pegawaiA, 8, '2032-08-05', '2032-08-15');
+        $this->createAssignment($existingActivity, $this->pegawaiA, 2, '2032-08-05', '2032-08-15');
 
         $beforeActivities = Activity::count();
         $beforeAssignments = Assignment::count();
@@ -321,11 +326,11 @@ class ActivityFormAndVisibilityTest extends TestCase
             'team_id' => $this->teamA->id,
             'mulai' => '2032-08-10',
             'selesai' => '2032-08-20',
-            'bobot' => 2.0,
             'assignments' => [
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Pencacah',
+                    'jam_per_hari' => 3,
                     'volume' => 20,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -343,10 +348,11 @@ class ActivityFormAndVisibilityTest extends TestCase
         $impact = collect($pegawaiRow['dampak_bulanan'])->firstWhere('bulan', '2032-08');
         $this->assertNotNull($impact);
 
-        // Kegiatan eksisting: 8 x 1.25 = 10 poin pada 2032-08.
-        $this->assertSame(10.0, (float) $impact['beban_sebelum']);
-        $this->assertSame(40.0, (float) $impact['tambahan_poin']);
-        $this->assertSame(50.0, (float) $impact['beban_sesudah']);
+        // Penugasan eksisting: 9 hari kerja x 2 jam = 18 jam.
+        // Penugasan baru: 9 hari kerja x 3 jam = 27 jam.
+        $this->assertSame(14.0, (float) $impact['beban_sebelum']);
+        $this->assertSame(27.0, (float) $impact['tambahan_jam']);
+        $this->assertSame(41.0, (float) $impact['beban_sesudah']);
         $this->assertSame(1, $impact['jumlah_penugasan_sebelum']);
         $this->assertSame(2, $impact['jumlah_penugasan_sesudah']);
         $this->assertSame(2, $impact['penugasan_bersamaan_sesudah']);
@@ -361,11 +367,11 @@ class ActivityFormAndVisibilityTest extends TestCase
      */
     public function test_preview_batch_warns_on_threshold_and_concurrency(): void
     {
-        Setting::setVal('ambang_beban_bulanan', 10);
+        Setting::setVal('jam_kerja_per_hari', 0.25);
         Setting::setVal('maks_penugasan_bersamaan', 3);
 
-        $ong1 = $this->createActivity($this->teamA, 'Kegiatan Ongkir 1 Fase 6', '2032-09-01', '2032-09-30', 1.0);
-        $ong2 = $this->createActivity($this->teamA, 'Kegiatan Ongkir 2 Fase 6', '2032-09-05', '2032-09-25', 1.0);
+        $ong1 = $this->createActivity($this->teamA, 'Kegiatan Ongkir 1 Fase 6', '2032-09-01', '2032-09-30');
+        $ong2 = $this->createActivity($this->teamA, 'Kegiatan Ongkir 2 Fase 6', '2032-09-05', '2032-09-25');
 
         $this->createAssignment($ong1, $this->pegawaiA, 1, '2032-09-10', '2032-09-12');
         $this->createAssignment($ong2, $this->pegawaiA, 1, '2032-09-10', '2032-09-12');
@@ -376,11 +382,11 @@ class ActivityFormAndVisibilityTest extends TestCase
             'team_id' => $this->teamA->id,
             'mulai' => '2032-09-10',
             'selesai' => '2032-09-15',
-            'bobot' => 1.0,
             'assignments' => [
                 [
                     'user_id' => $this->pegawaiA->id,
                     'peran' => 'Pencacah',
+                    'jam_per_hari' => 0.25,
                     'volume' => 20,
                     'satuan' => SatuanPenugasan::DOKUMEN->value,
                 ],
@@ -393,7 +399,7 @@ class ActivityFormAndVisibilityTest extends TestCase
             ->pluck('jenis')
             ->all();
 
-        $this->assertContains('beban', $warningTypes);
+        $this->assertContains('melebihi_kapasitas_harian', $warningTypes);
         $this->assertContains('penugasan_bersamaan', $warningTypes);
     }
 
@@ -402,7 +408,7 @@ class ActivityFormAndVisibilityTest extends TestCase
      */
     public function test_assignment_metrics_are_hidden_for_unrelated_viewers(): void
     {
-        $activityA = $this->createActivity($this->teamA, 'Kegiatan Tampil A Fase 6', '2032-10-01', '2032-10-20', 1.0);
+        $activityA = $this->createActivity($this->teamA, 'Kegiatan Tampil A Fase 6', '2032-10-01', '2032-10-20');
         $assignmentA = $this->createAssignment($activityA, $this->pegawaiA, 25, '2032-10-01', '2032-10-20');
 
         // Ketua timB (tim lain) melihat metrik kosong.
@@ -411,7 +417,7 @@ class ActivityFormAndVisibilityTest extends TestCase
         $ketuaBResponse->assertOk();
         $this->assertNull($ketuaBResponse->json('data.0.volume'));
         $this->assertNull($ketuaBResponse->json('data.0.satuan'));
-        $this->assertNull($ketuaBResponse->json('data.0.poin_total'));
+        $this->assertNull($ketuaBResponse->json('data.0.jam_per_hari'));
         $this->assertFalse($ketuaBResponse->json('data.0.metrics_visible'));
 
         // Ketua A (tim kegiatan) melihat metrik penuh.
@@ -419,6 +425,7 @@ class ActivityFormAndVisibilityTest extends TestCase
         $ketuaAResponse = $this->getJson("/api/activities/{$activityA->id}/assignments");
         $ketuaAResponse->assertOk();
         $this->assertSame(25.0, (float) $ketuaAResponse->json('data.0.volume'));
+        $this->assertSame(2.0, (float) $ketuaAResponse->json('data.0.jam_per_hari'));
         $this->assertTrue($ketuaAResponse->json('data.0.metrics_visible'));
 
         // Pemilik penugasan melihat metrik penuh.
@@ -427,13 +434,15 @@ class ActivityFormAndVisibilityTest extends TestCase
         $ownerResponse->assertOk();
         $this->assertSame(25.0, (float) $ownerResponse->json('data.0.volume'));
 
-        // Admin dan pimpinan melihat metrik penuh.
-        foreach ([$this->admin, $this->pimpinan] as $viewer) {
-            Sanctum::actingAs($viewer);
-            $response = $this->getJson("/api/activities/{$activityA->id}/assignments");
-            $response->assertOk();
-            $this->assertSame(25.0, (float) $response->json('data.0.volume'));
-        }
+        // Admin melihat metrik penuh.
+        Sanctum::actingAs($this->admin);
+        $response = $this->getJson("/api/activities/{$activityA->id}/assignments");
+        $response->assertOk();
+        $this->assertSame(25.0, (float) $response->json('data.0.volume'));
+
+        // Pimpinan tidak berwenang membuka data kegiatan.
+        Sanctum::actingAs($this->pimpinan);
+        $this->getJson("/api/activities/{$activityA->id}/assignments")->assertForbidden();
 
         // Endpoint detail penugasan menolak pegawai yang tidak berwenang (403).
         Sanctum::actingAs($this->pegawaiB);
@@ -445,7 +454,7 @@ class ActivityFormAndVisibilityTest extends TestCase
      */
     public function test_calendar_hides_assignment_metrics_for_unrelated_viewers(): void
     {
-        $activity = $this->createActivity($this->teamA, 'Kegiatan Kalender Fase 6', '2032-11-01', '2032-11-10', 1.0);
+        $activity = $this->createActivity($this->teamA, 'Kegiatan Kalender Fase 6', '2032-11-01', '2032-11-10');
         $this->createAssignment($activity, $this->pegawaiA, 15, '2032-11-01', '2032-11-10');
 
         Sanctum::actingAs($this->pegawaiB);
@@ -472,24 +481,22 @@ class ActivityFormAndVisibilityTest extends TestCase
      */
     public function test_user_detail_concurrency_and_metrics_visibility(): void
     {
-        $activityA = $this->createActivity($this->teamA, 'Kegiatan Detail A Fase 6', '2033-01-05', '2033-01-20', 1.0);
-        $activityB = $this->createActivity($this->teamB, 'Kegiatan Detail B Fase 6', '2033-01-05', '2033-01-20', 1.0);
+        $activityA = $this->createActivity($this->teamA, 'Kegiatan Detail A Fase 6', '2033-01-05', '2033-01-20');
+        $activityB = $this->createActivity($this->teamB, 'Kegiatan Detail B Fase 6', '2033-01-05', '2033-01-20');
 
         $this->createAssignment($activityA, $this->pegawaiA, 10, '2033-01-05', '2033-01-15');
         $this->createAssignment($activityB, $this->pegawaiA, 40, '2033-01-05', '2033-01-15');
 
         Sanctum::actingAs($this->ketuaA);
 
-        $response = $this->getJson("/api/workload/users/{$this->pegawaiA->id}?from=2033-01&to=2033-01");
+        $response = $this->getJson("/api/workload/users/{$this->pegawaiA->id}?month=2033-01&per_page=50");
         $response->assertOk();
 
         $expected = app(WorkloadService::class)->calculateMonthlyWorkloadForUser($this->pegawaiA, '2033-01');
-        $trend = collect($response->json('tren_bulanan'))->firstWhere('bulan', '2033-01');
-        $this->assertEqualsWithDelta($expected['beban'], (float) $trend['poin'], 0.001);
-        $this->assertEqualsWithDelta($expected['persentase'], (float) $trend['persentase'], 0.001);
-        $this->assertSame($expected['indikator'], $trend['indikator']);
-        $this->assertSame($expected['jumlah_penugasan'], $trend['jumlah_penugasan']);
-        $this->assertSame($expected['penugasan_bersamaan_maks'], $trend['penugasan_bersamaan_maks']);
+        $this->assertEqualsWithDelta($expected['jam_terpakai'], (float) $response->json('jam_terpakai'), 0.001);
+        $this->assertEqualsWithDelta($expected['persentase'], (float) $response->json('persentase'), 0.001);
+        $this->assertSame($expected['indikator'], $response->json('indikator'));
+        $this->assertSame($expected['jumlah_penugasan'], $response->json('penugasan_meta.total'));
 
         $penugasan = collect($response->json('penugasan'));
         $teamARow = $penugasan->firstWhere('activity_id', $activityA->id);
@@ -499,20 +506,19 @@ class ActivityFormAndVisibilityTest extends TestCase
         $this->assertNotNull($teamBRow);
         $this->assertTrue($teamARow['metrics_visible']);
         $this->assertFalse($teamBRow['metrics_visible']);
-        $this->assertSame(10.0, (float) $teamARow['volume']);
-        $this->assertNull($teamBRow['volume']);
+        $this->assertSame(2.0, (float) $teamARow['jam_per_hari']);
+        $this->assertNull($teamBRow['jam_per_hari']);
 
         // Pegawai lain ditolak melihat detail.
         Sanctum::actingAs($this->pegawaiB);
-        $this->getJson("/api/workload/users/{$this->pegawaiA->id}?from=2033-01&to=2033-01")->assertForbidden();
+        $this->getJson("/api/workload/users/{$this->pegawaiA->id}?month=2033-01")->assertForbidden();
     }
 
     private function createActivity(
         Team $team,
         string $nama,
         string $mulai,
-        string $selesai,
-        float $bobot
+        string $selesai
     ): Activity {
         return Activity::create([
             'nama' => $nama,
@@ -520,7 +526,6 @@ class ActivityFormAndVisibilityTest extends TestCase
             'team_id' => $team->id,
             'mulai' => $mulai,
             'selesai' => $selesai,
-            'bobot' => $bobot,
         ]);
     }
 
@@ -535,6 +540,7 @@ class ActivityFormAndVisibilityTest extends TestCase
             'activity_id' => $activity->id,
             'user_id' => $user->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 2,
             'volume' => $volume,
             'satuan' => SatuanPenugasan::DOKUMEN->value,
             'mulai' => $mulai,

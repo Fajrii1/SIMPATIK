@@ -18,7 +18,7 @@ class WeeklyIssue extends Model
         'activity_id',
         'team_id',
         'pelapor_id',
-        'minggu_mulai',
+        'bulan',
         'kendala',
         'solusi',
         'tindak_lanjut',
@@ -33,7 +33,7 @@ class WeeklyIssue extends Model
     {
         return [
             'status' => StatusKendala::class,
-            'minggu_mulai' => 'date',
+            'bulan' => 'date',
             'tenggat' => 'date',
             'ditutup_pada' => 'datetime',
         ];
@@ -84,11 +84,11 @@ class WeeklyIssue extends Model
     }
 
     /**
-     * Scope untuk mengambil daftar kendala yang terbawa dari minggu sebelumnya (PRD Bagian 8.5).
+     * Scope untuk mengambil daftar kendala yang terbawa dari bulan sebelumnya (PRD Bagian 8.5).
      */
-    public function scopeCarriedOver(Builder $query, string $weekMonday): Builder
+    public function scopeCarriedOver(Builder $query, string $monthStart): Builder
     {
-        return $query->where('minggu_mulai', '<', $weekMonday)
+        return $query->where('bulan', '<', $monthStart)
             ->where('status', '!=', StatusKendala::SELESAI->value);
     }
 }

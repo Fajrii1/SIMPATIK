@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Assignment;
 use App\Models\User;
 use App\Services\WorkloadService;
-use App\Support\AssignmentVisibility;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,14 +17,13 @@ class WorkloadController extends Controller
     ) {}
 
     /**
-     * Ringkasan beban kerja bulanan untuk semua atau filtered pegawai.
-     * GET /api/workload?month=YYYY-MM&team_id=X
+     * Ringkasan beban kerja bulanan dengan pagination dan filter server-side.
+     * GET /api/workload?month=YYYY-MM&team_id=X&search=...&page=1&per_page=10
      */
     public function index(Request $request): JsonResponse
     {
         $currentUser = $request->user();
 
-        // Validasi parameter bulan (format YYYY-MM), default bulan saat ini
         $month = $request->query('month', Carbon::now()->format('Y-m'));
         if (! preg_match('/^\d{4}-\d{2}$/', $month)) {
             $month = Carbon::now()->format('Y-m');
@@ -33,17 +32,12 @@ class WorkloadController extends Controller
         $teamId = $request->query('team_id');
         $teamId = ($teamId === null || $teamId === '') ? null : (int) $teamId;
 
-        // Pengaturan hak akses PRD:
-        // Admin & Pimpinan dapat melihat seluruh pegawai atau filter berdasarkan tim.
-        // Ketua tim: default melihat tim yang dipimpinnya, atau jika admin melihat semua.
-        // Pegawai biasa: hanya melihat bebannya sendiri atau anggota timnya.
         $query = User::where('aktif', true);
 
         $userRole = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
         if ($userRole === 'pegawai') {
             $ledTeams = $currentUser->ledTeams->pluck('id')->map(fn ($id) => (int) $id)->all();
             if (! empty($ledTeams)) {
-                // User adalah ketua tim
                 if ($teamId !== null && in_array($teamId, $ledTeams, true)) {
                     $query->whereHas('teams', function ($q) use ($teamId) {
                         $q->where('teams.id', $teamId);
@@ -54,7 +48,6 @@ class WorkloadController extends Controller
                     });
                 }
             } else {
-                // Pegawai biasa hanya melihat bebannya sendiri
                 $query->where('id', $currentUser->id);
             }
         } elseif ($teamId !== null) {
@@ -63,16 +56,22 @@ class WorkloadController extends Controller
             });
         }
 
-        $users = $query->with('teams')->orderBy('nama')->get();
+        if ($request->filled('search')) {
+            $search = $request->string('search')->trim()->toString();
+            $query->where(function ($q) use ($search) {
+                $q->where('nama', 'like', "%{$search}%")
+                    ->orWhere('nip', 'like', "%{$search}%");
+            });
+        }
+
+        $perPage = min(max($request->integer('per_page', 10), 1), 50);
+        $paginator = $query->with('teams')->orderBy('nama')->orderBy('id')->paginate($perPage);
 
         $workloads = [];
-        $totalPoints = 0;
-        $overloadCount = 0;
-        $warningCount = 0;
 
-        foreach ($users as $user) {
-            $workload = $this->workloadService->calculateMonthlyWorkloadForUser($user->id, $month);
-            $points = $workload['beban'] ?? $workload['poin'] ?? 0.0;
+        foreach ($paginator->items() as $user) {
+            $workload = $this->workloadService->calculateMonthlyWorkloadForUser($user, $month);
+
             $workloads[] = [
                 'user' => [
                     'id' => $user->id,
@@ -80,48 +79,49 @@ class WorkloadController extends Controller
                     'nip' => $user->nip,
                     'email' => $user->email,
                     'peran' => $user->peran instanceof \BackedEnum ? $user->peran->value : (string) $user->peran,
-                    'teams' => $user->teams->pluck('nama')->toArray(),
+                    'teams' => $user->teams->map(fn ($team) => [
+                        'id' => $team->id,
+                        'nama' => $team->nama,
+                    ])->values()->all(),
                 ],
                 'bulan' => $month,
-                'poin' => $points,
+                'jam_terpakai' => $workload['jam_terpakai'],
+                'kapasitas_jam' => $workload['kapasitas_jam'],
                 'persentase' => $workload['persentase'],
                 'indikator' => $workload['indikator'],
                 'jumlah_penugasan' => $workload['jumlah_penugasan'],
                 'penugasan_bersamaan_maks' => $workload['penugasan_bersamaan_maks'],
             ];
-
-            $totalPoints += $points;
-            if ($workload['indikator'] === 'melebihi') {
-                $overloadCount++;
-            } elseif ($workload['indikator'] === 'hampir_penuh') {
-                $warningCount++;
-            }
         }
 
         return response()->json([
             'bulan' => $month,
-            'ambang_batas' => $this->workloadService->getMonthlyThreshold(),
-            'ringkasan' => [
-                'total_pegawai' => count($workloads),
-                'total_poin' => round($totalPoints, 2),
-                'rata_rata_poin' => count($workloads) > 0 ? round($totalPoints / count($workloads), 2) : 0,
-                'pegawai_melebihi_beban' => $overloadCount,
-                'pegawai_hampir_penuh' => $warningCount,
-            ],
+            'jam_kerja_per_hari' => $this->workloadService->getDailyWorkHours(),
             'data' => $workloads,
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+            ],
+            'links' => [
+                'prev' => $paginator->previousPageUrl(),
+                'next' => $paginator->nextPageUrl(),
+            ],
         ]);
     }
 
     /**
-     * Detail beban kerja pegawai spesifik dengan rincian penugasan dan tren bulan.
-     * GET /api/workload/users/{id}?from=YYYY-MM&to=YYYY-MM
+     * Detail beban kerja pegawai untuk satu bulan, termasuk rincian kegiatan.
+     * GET /api/workload/users/{id}?month=YYYY-MM&page=1&per_page=10
      */
     public function userDetail(Request $request, int $id): JsonResponse
     {
         $currentUser = $request->user();
         $targetUser = User::with('teams')->findOrFail($id);
 
-        // Hak akses: admin & pimpinan bebas; ketua tim hanya boleh akses anggota tim yang dipimpin; pegawai hanya boleh akses dirinya sendiri
         $userRole = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
         if ($userRole === 'pegawai') {
             $ledTeams = $currentUser->ledTeams->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -133,78 +133,49 @@ class WorkloadController extends Controller
             }
         }
 
-        $now = Carbon::now();
-        $fromMonth = $request->query('from', $now->copy()->subMonths(2)->format('Y-m'));
-        $toMonth = $request->query('to', $now->copy()->addMonths(2)->format('Y-m'));
-
-        $start = Carbon::createFromFormat('Y-m', $fromMonth)->startOfMonth();
-        $end = Carbon::createFromFormat('Y-m', $toMonth)->endOfMonth();
-
-        $history = [];
-        $currentCursor = $start->copy();
-
-        while ($currentCursor->lessThanOrEqualTo($end)) {
-            $mStr = $currentCursor->format('Y-m');
-            $workload = $this->workloadService->calculateMonthlyWorkloadForUser($targetUser->id, $mStr);
-            $points = $workload['beban'] ?? $workload['poin'] ?? 0.0;
-            $history[] = [
-                'bulan' => $mStr,
-                'poin' => $points,
-                'persentase' => $workload['persentase'],
-                'indikator' => $workload['indikator'],
-                'jumlah_penugasan' => $workload['jumlah_penugasan'],
-                'penugasan_bersamaan_maks' => $workload['penugasan_bersamaan_maks'],
-            ];
-            $currentCursor->addMonth();
+        $month = $request->query('month', Carbon::now()->format('Y-m'));
+        if (! preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $month = Carbon::now()->format('Y-m');
         }
 
-        // Ambil penugasan berdasarkan irisan periode efektif dengan jendela.
-        // Periode efektif = COALESCE(assignments.mulai, activities.mulai) sampai
-        // COALESCE(assignments.selesai, activities.selesai).
-        // whereHas('activity') otomatis mengecualikan kegiatan yang di-soft-delete,
-        // konsisten dengan WorkloadService.
-        $assignments = $targetUser->assignments()
-            ->with(['activity.team'])
-            ->whereHas('activity', function ($q) use ($start, $end) {
-                $q->whereRaw(
-                    'COALESCE(assignments.mulai, activities.mulai) <= ?',
-                    [$end->toDateString()]
-                )->whereRaw(
-                    'COALESCE(assignments.selesai, activities.selesai) >= ?',
-                    [$start->toDateString()]
-                );
-            })
-            ->get()
-            // Lewati baris tanpa kegiatan agar tidak memicu error saat dipetakan.
-            ->filter(fn ($assignment) => $assignment->activity !== null)
-            ->values();
-
+        $workload = $this->workloadService->calculateMonthlyWorkloadForUser($targetUser, $month);
         $viewer = $currentUser;
 
-        $assignmentDetails = $assignments->map(function ($assignment) use ($viewer) {
-            $activity = $assignment->activity;
-            $jenis = $activity->jenis instanceof \BackedEnum ? $activity->jenis->value : (string) $activity->jenis;
-            $canViewMetrics = AssignmentVisibility::canViewMetrics($viewer, $assignment, (int) $activity->team_id);
+        // Peta penugasan untuk melengkapi nama tim pada setiap rincian.
+        $assignments = Assignment::query()
+            ->with('activity.team')
+            ->whereIn('id', collect($workload['rincian'])->pluck('assignment_id')->all())
+            ->get()
+            ->keyBy('id');
+
+        $rows = collect($workload['rincian'])->map(function ($row) use ($assignments, $viewer) {
+            $assignment = $assignments->get($row['assignment_id']);
+            $teamName = $assignment?->activity?->team?->nama;
+            $metricsVisible = $assignment
+                ? \App\Support\AssignmentVisibility::canViewMetrics($viewer, $assignment)
+                : false;
 
             return [
-                'id' => $assignment->id,
-                'activity_id' => $assignment->activity_id,
-                'kegiatan' => $activity->nama,
-                'jenis_kegiatan' => $jenis,
-                'tim' => $activity->team?->nama,
-                'peran' => $assignment->peran,
-                'volume' => $canViewMetrics ? (float) $assignment->volume : null,
-                'satuan' => $canViewMetrics ? (string) $assignment->satuan : null,
-                'bobot' => (float) $activity->bobot,
-                'poin_total' => $canViewMetrics
-                    ? round((float) $assignment->volume * (float) ($activity->bobot ?? 1.00), 2)
-                    : null,
-                'metrics_visible' => $canViewMetrics,
-                'tanggal_mulai' => $assignment->getEffectiveMulai()?->toDateString(),
-                'tanggal_selesai' => $assignment->getEffectiveSelesai()?->toDateString(),
-                'status_kegiatan' => $activity->status,
+                'assignment_id' => $row['assignment_id'],
+                'activity_id' => $row['activity_id'],
+                'kegiatan' => $row['activity_nama'],
+                'tim' => $teamName,
+                'peran' => $row['peran'],
+                'mulai' => $row['mulai'],
+                'selesai' => $row['selesai'],
+                'jam_per_hari' => $metricsVisible ? $row['jam_per_hari'] : null,
+                'hari_kerja' => $row['hari_kerja'],
+                'jam_terpakai' => $metricsVisible ? $row['jam_terpakai'] : null,
+                'metrics_visible' => $metricsVisible,
             ];
-        });
+        })->values();
+
+        $perPage = min(max($request->integer('per_page', 10), 1), 50);
+        $page = max($request->integer('page', 1), 1);
+        $total = $rows->count();
+        $lastPage = max((int) ceil($total / $perPage), 1);
+        $page = min($page, $lastPage);
+        $paged = $rows->slice(($page - 1) * $perPage, $perPage)->values();
 
         return response()->json([
             'user' => [
@@ -215,14 +186,26 @@ class WorkloadController extends Controller
                 'peran' => $targetUser->peran instanceof \BackedEnum ? $targetUser->peran->value : (string) $targetUser->peran,
                 'teams' => $targetUser->teams->pluck('nama')->toArray(),
             ],
-            'ambang_batas' => $this->workloadService->getMonthlyThreshold(),
-            'tren_bulanan' => $history,
-            'penugasan' => $assignmentDetails,
+            'bulan' => $month,
+            'jam_terpakai' => $workload['jam_terpakai'],
+            'kapasitas_jam' => $workload['kapasitas_jam'],
+            'persentase' => $workload['persentase'],
+            'indikator' => $workload['indikator'],
+            'jam_kerja_per_hari' => $workload['jam_kerja_per_hari'],
+            'penugasan' => $paged,
+            'penugasan_meta' => [
+                'current_page' => $page,
+                'last_page' => $lastPage,
+                'per_page' => $perPage,
+                'total' => $total,
+                'from' => $total > 0 ? (($page - 1) * $perPage) + 1 : null,
+                'to' => $total > 0 ? min($page * $perPage, $total) : null,
+            ],
         ]);
     }
 
     /**
-     * Daftar peringatan beban kerja bulanan (beban lebih, penugasan bersamaan tinggi, kegiatan besar ganda).
+     * Daftar peringatan beban kerja bulanan.
      * GET /api/workload/warnings?month=YYYY-MM&team_id=X
      */
     public function warnings(Request $request): JsonResponse
@@ -238,12 +221,10 @@ class WorkloadController extends Controller
         $teamId = ($teamId === null || $teamId === '') ? null : (int) $teamId;
         $allWarnings = $this->workloadService->getMonthlyWarnings($month);
 
-        // Filter berdasarkan hak akses
         $userRole = $currentUser->peran instanceof \BackedEnum ? $currentUser->peran->value : (string) $currentUser->peran;
         if ($userRole === 'pegawai') {
             $ledTeams = $currentUser->ledTeams->pluck('id')->map(fn ($id) => (int) $id)->all();
             if (! empty($ledTeams)) {
-                // Filter hanya peringatan anggota tim yang dipimpin atau peringatan kantor umum
                 $allowedUserIds = User::whereHas('teams', function ($q) use ($ledTeams) {
                     $q->whereIn('teams.id', $ledTeams);
                 })->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -253,7 +234,6 @@ class WorkloadController extends Controller
                         || in_array((int) $w['pegawai_id'], $allowedUserIds, true);
                 }));
             } else {
-                // Pegawai biasa hanya melihat peringatan untuk dirinya
                 $allWarnings = array_values(array_filter($allWarnings, function ($w) use ($currentUser) {
                     return $w['pegawai_id'] !== null
                         && (int) $w['pegawai_id'] === (int) $currentUser->id;

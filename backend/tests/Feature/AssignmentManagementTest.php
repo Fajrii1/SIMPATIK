@@ -57,9 +57,9 @@ class AssignmentManagementTest extends TestCase
                             'activity_id',
                             'user_id',
                             'peran',
+                            'jam_per_hari',
                             'volume',
                             'satuan',
-                            'poin_total',
                         ],
                     ],
                 ]);
@@ -83,7 +83,6 @@ class AssignmentManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-30',
-            'bobot' => 1.5,
         ]);
 
         try {
@@ -92,6 +91,7 @@ class AssignmentManagementTest extends TestCase
             $response = $this->postJson("/api/activities/{$activity->id}/assignments", [
                 'user_id' => $pegawai->id,
                 'peran' => 'Pemeriksa',
+                'jam_per_hari' => 2,
                 'volume' => 40,
                 'satuan' => 'Dokumen',
                 'mulai' => '2026-11-05',
@@ -101,7 +101,7 @@ class AssignmentManagementTest extends TestCase
             $response->assertStatus(201)
                 ->assertJsonPath('data.peran', 'Pemeriksa')
                 ->assertJsonPath('data.volume', 40)
-                ->assertJsonPath('data.poin_total', 60); // 40 * 1.5 = 60.0
+                ->assertJsonPath('data.jam_per_hari', 2);
 
             $assignmentId = $response->json('data.id');
             $assignment = Assignment::find($assignmentId);
@@ -141,6 +141,7 @@ class AssignmentManagementTest extends TestCase
             $response = $this->postJson("/api/activities/{$activity->id}/assignments", [
                 'user_id' => $inactivePegawai->id,
                 'peran' => 'Pencacah',
+                'jam_per_hari' => 2,
                 'volume' => 10,
                 'satuan' => 'Dokumen',
             ]);
@@ -177,6 +178,7 @@ class AssignmentManagementTest extends TestCase
             $response = $this->postJson("/api/activities/{$activity->id}/assignments", [
                 'user_id' => $pegawai->id,
                 'peran' => 'Pencacah',
+                'jam_per_hari' => 2,
                 'volume' => 10,
                 'satuan' => 'Dokumen',
                 'mulai' => '2026-11-01', // Di luar batas (kegiatan mulai 2026-11-05)
@@ -207,7 +209,6 @@ class AssignmentManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-10-01',
             'selesai' => '2026-11-15',
-            'bobot' => 1.5,
         ]);
 
         $initialAssignmentsCount = Assignment::count();
@@ -219,6 +220,7 @@ class AssignmentManagementTest extends TestCase
                 'activity_id' => $activity->id,
                 'user_id' => $pegawai->id,
                 'peran' => 'Pencacah',
+                'jam_per_hari' => 2,
                 'volume' => 60,
                 'satuan' => 'Dokumen',
                 'mulai' => '2026-10-01',
@@ -232,22 +234,23 @@ class AssignmentManagementTest extends TestCase
                         'pegawai',
                         'kegiatan',
                         'rencana' => [
-                            'total_poin',
+                            'total_jam',
                         ],
                         'dampak_bulanan' => [
                             '*' => [
                                 'bulan',
-                                'tambahan_poin',
+                                'tambahan_jam',
                                 'beban_sebelum',
                                 'beban_sesudah',
                                 'indikator_sesudah',
                             ],
                         ],
                         'peringatan',
-                        'melebihi_ambang',
+                        'melebihi_kapasitas_harian',
                     ],
                 ])
-                ->assertJsonPath('data.rencana.total_poin', 90);
+                // Oktober 22 hari kerja x 2 jam + November 10 hari kerja x 2 jam = 64 jam.
+                ->assertJsonPath('data.rencana.total_jam', 64);
 
             // Verifikasi mutlak: jumlah baris penugasan di database TIDAK berubah
             $this->assertEquals($initialAssignmentsCount, Assignment::count());
@@ -271,7 +274,6 @@ class AssignmentManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-30',
-            'bobot' => 1.0,
         ]);
 
         try {
@@ -316,7 +318,6 @@ class AssignmentManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-30',
-            'bobot' => 1.0,
         ]);
 
         $activity->assignments()->create([
@@ -385,7 +386,6 @@ class AssignmentManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-30',
-            'bobot' => 1.0,
         ]);
 
         $pj = $activity->assignments()->create([

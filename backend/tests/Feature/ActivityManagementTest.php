@@ -60,7 +60,6 @@ class ActivityManagementTest extends TestCase
                             'team_id',
                             'mulai',
                             'selesai',
-                            'bobot',
                             'status',
                         ],
                     ],
@@ -97,13 +96,13 @@ class ActivityManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-30',
-            'bobot' => 1.25,
             'kegiatan_besar' => true,
             'keterangan' => 'Keterangan uji kegiatan admin',
             'assignments' => [
                 [
                     'user_id' => $admin->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 12,
                     'satuan' => 'Dokumen',
                 ],
@@ -112,7 +111,6 @@ class ActivityManagementTest extends TestCase
 
         $response->assertStatus(201)
             ->assertJsonPath('data.nama', 'Survei Uji Admin Baru')
-            ->assertJsonPath('data.bobot', 1.25)
             ->assertJsonPath('data.kegiatan_besar', true);
 
         $activityId = $response->json('data.id');
@@ -142,11 +140,11 @@ class ActivityManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-02',
             'selesai' => '2026-11-20',
-            'bobot' => 2,
             'assignments' => [
                 [
                     'user_id' => $users[0]->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 5,
                     'satuan' => 'Dokumen',
                     'mulai' => '2026-11-02',
@@ -155,6 +153,7 @@ class ActivityManagementTest extends TestCase
                 [
                     'user_id' => $users[1]->id,
                     'peran' => 'Organik',
+                    'jam_per_hari' => 1.5,
                     'volume' => 3,
                     'satuan' => 'Hari',
                     'mulai' => '2026-11-05',
@@ -206,6 +205,7 @@ class ActivityManagementTest extends TestCase
                 [
                     'user_id' => $user->id,
                     'peran' => 'Penanggung Jawab',
+                    'jam_per_hari' => 2,
                     'volume' => 1,
                     'satuan' => 'Hari',
                     'mulai' => '2026-11-01',
@@ -254,6 +254,7 @@ class ActivityManagementTest extends TestCase
                     [
                         'user_id' => $tempKetua->id,
                         'peran' => 'Penanggung Jawab',
+                        'jam_per_hari' => 2,
                         'volume' => 4,
                         'satuan' => 'Dokumen',
                     ],
@@ -347,7 +348,6 @@ class ActivityManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-30',
-            'bobot' => 1.0,
             'selesai_manual' => false,
         ]);
 
@@ -392,7 +392,6 @@ class ActivityManagementTest extends TestCase
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-20',
-            'bobot' => 1.0,
             'selesai_manual' => false,
         ]);
 
@@ -400,6 +399,7 @@ class ActivityManagementTest extends TestCase
             'activity_id' => $activity->id,
             'user_id' => $pegawai->id,
             'peran' => 'Pencacah',
+            'jam_per_hari' => 2,
             'volume' => 10,
             'satuan' => 'Dokumen',
         ]);
@@ -429,9 +429,9 @@ class ActivityManagementTest extends TestCase
     }
 
     /**
-     * Uji batas bobot kegiatan 0,50 sampai 3,00 pada pembuatan kegiatan.
+     * Uji jam per hari penugasan wajib diisi dan berada pada rentang yang sah saat kegiatan dibuat.
      */
-    public function test_activity_weight_must_be_between_half_and_three_on_create(): void
+    public function test_assignment_daily_hours_required_and_bounded_on_create(): void
     {
         $admin = User::where('email', 'admin@contoh.test')->first();
         $team = Team::first();
@@ -442,7 +442,7 @@ class ActivityManagementTest extends TestCase
         Sanctum::actingAs($admin);
 
         $basePayload = [
-            'nama' => 'Kegiatan Uji Batas Bobot',
+            'nama' => 'Kegiatan Uji Jam Per Hari',
             'jenis' => 'Survei',
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
@@ -457,63 +457,78 @@ class ActivityManagementTest extends TestCase
             ],
         ];
 
-        $this->postJson('/api/activities', $basePayload + ['bobot' => 0.49])
+        // Jam per hari wajib diisi.
+        $this->postJson('/api/activities', $basePayload)
             ->assertStatus(422)
-            ->assertJsonValidationErrors('bobot');
+            ->assertJsonValidationErrors('assignments.0.jam_per_hari');
 
-        $this->postJson('/api/activities', $basePayload + ['bobot' => 3.01])
+        // Di bawah 0,25 jam ditolak.
+        $basePayload['assignments'][0]['jam_per_hari'] = 0.1;
+        $this->postJson('/api/activities', $basePayload)
             ->assertStatus(422)
-            ->assertJsonValidationErrors('bobot');
+            ->assertJsonValidationErrors('assignments.0.jam_per_hari');
 
-        $lower = $this->postJson('/api/activities', $basePayload + ['bobot' => 0.5]);
-        $lower->assertStatus(201)->assertJsonPath('data.bobot', 0.5);
+        // Melebihi jam kerja per hari (bawaan 7) ditolak.
+        $basePayload['assignments'][0]['jam_per_hari'] = 8;
+        $this->postJson('/api/activities', $basePayload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('assignments.0.jam_per_hari');
 
-        $upper = $this->postJson('/api/activities', $basePayload + ['bobot' => 3.0]);
-        $upper->assertStatus(201)->assertJsonPath('data.bobot', 3);
+        // Nilai sah diterima.
+        $basePayload['assignments'][0]['jam_per_hari'] = 2;
+        $response = $this->postJson('/api/activities', $basePayload);
+        $response->assertStatus(201)
+            ->assertJsonPath('data.assignments.0.jam_per_hari', 2);
 
-        Activity::find($lower->json('data.id'))?->forceDelete();
-        Activity::find($upper->json('data.id'))?->forceDelete();
+        Activity::find($response->json('data.id'))?->forceDelete();
     }
 
     /**
-     * Uji batas bobot kegiatan 0,50 sampai 3,00 pada pembaruan kegiatan.
+     * Uji jam per hari penugasan yang sudah ada dapat diperbarui dalam batas yang sah.
      */
-    public function test_activity_weight_must_be_between_half_and_three_on_update(): void
+    public function test_assignment_daily_hours_can_be_updated(): void
     {
         $admin = User::where('email', 'admin@contoh.test')->first();
         $team = Team::first();
+        $pegawai = User::where('email', 'pegawai01@contoh.test')->first();
         $this->assertNotNull($admin);
         $this->assertNotNull($team);
+        $this->assertNotNull($pegawai);
 
         $activity = Activity::create([
-            'nama' => 'Kegiatan Uji Batas Bobot Update',
+            'nama' => 'Kegiatan Uji Jam Per Hari Update',
             'jenis' => 'Survei',
             'team_id' => $team->id,
             'mulai' => '2026-11-01',
             'selesai' => '2026-11-10',
-            'bobot' => 1.0,
             'selesai_manual' => false,
+        ]);
+
+        $assignment = Assignment::create([
+            'activity_id' => $activity->id,
+            'user_id' => $pegawai->id,
+            'peran' => 'Pencacah',
+            'jam_per_hari' => 2,
+            'volume' => 10,
+            'satuan' => 'Dokumen',
         ]);
 
         try {
             Sanctum::actingAs($admin);
 
-            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 0.49])
+            $this->putJson("/api/assignments/{$assignment->id}", ['jam_per_hari' => 0.1])
                 ->assertStatus(422)
-                ->assertJsonValidationErrors('bobot');
+                ->assertJsonValidationErrors('jam_per_hari');
 
-            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 3.01])
+            $this->putJson("/api/assignments/{$assignment->id}", ['jam_per_hari' => 8])
                 ->assertStatus(422)
-                ->assertJsonValidationErrors('bobot');
+                ->assertJsonValidationErrors('jam_per_hari');
 
-            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 0.5])
+            $this->putJson("/api/assignments/{$assignment->id}", ['jam_per_hari' => 3])
                 ->assertOk()
-                ->assertJsonPath('data.bobot', 0.5);
-
-            $this->putJson("/api/activities/{$activity->id}", ['bobot' => 3.0])
-                ->assertOk()
-                ->assertJsonPath('data.bobot', 3);
+                ->assertJsonPath('data.jam_per_hari', 3);
         } finally {
+            $assignment->forceDelete();
             $activity->forceDelete();
         }
     }

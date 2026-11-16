@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Enums\JenisKegiatan;
 use App\Enums\SatuanPenugasan;
+use App\Models\Setting;
 use App\Models\User;
+use App\Services\WorkloadService;
 use App\Support\PeranPenugasan;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -45,20 +47,22 @@ class CreateActivityRequest extends FormRequest
      */
     public function rules(): array
     {
+        $maxJam = (float) Setting::getVal('jam_kerja_per_hari', 7);
+
         return [
             'nama' => ['required', 'string', 'max:200'],
             'jenis' => ['required', 'string', Rule::in(JenisKegiatan::values())],
             'team_id' => ['required', 'integer', 'exists:teams,id'],
             'mulai' => ['required', 'date'],
             'selesai' => ['sometimes', 'date', 'after_or_equal:mulai'],
-            'bobot' => ['nullable', 'numeric', 'min:0.5', 'max:3.0'],
             'kegiatan_besar' => ['nullable', 'boolean'],
             'keterangan' => ['nullable', 'string'],
             'assignments' => ['required', 'array', 'min:1'],
             'assignments.*.user_id' => ['required', 'integer', 'exists:users,id'],
             'assignments.*.peran' => ['required', 'string', 'max:60'],
-            'assignments.*.volume' => ['required', 'numeric', 'min:0.01'],
-            'assignments.*.satuan' => ['required', 'string', Rule::in(SatuanPenugasan::values())],
+            'assignments.*.jam_per_hari' => ['required', 'numeric', 'min:0.25', 'max:'.$maxJam],
+            'assignments.*.volume' => ['nullable', 'numeric', 'min:0.01'],
+            'assignments.*.satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
             'assignments.*.mulai' => ['nullable', 'date'],
             'assignments.*.selesai' => ['nullable', 'date', 'after_or_equal:mulai'],
         ];
@@ -77,6 +81,7 @@ class CreateActivityRequest extends FormRequest
 
             $activityStart = $this->filled('mulai') ? Carbon::parse($this->input('mulai'))->startOfDay() : null;
             $activityEnd = $this->filled('selesai') ? Carbon::parse($this->input('selesai'))->startOfDay() : null;
+            $workloadService = app(WorkloadService::class);
 
             $seenUserIds = [];
             $penanggungJawabCount = 0;
@@ -112,6 +117,18 @@ class CreateActivityRequest extends FormRequest
                     );
                 }
 
+                if (isset($assignment['jam_per_hari'])) {
+                    $value = (float) $assignment['jam_per_hari'];
+                    $steps = $value / 0.25;
+
+                    if (abs($steps - round($steps)) > 0.00001) {
+                        $validator->errors()->add(
+                            "assignments.{$index}.jam_per_hari",
+                            'Jam per hari harus berupa kelipatan 0,25.'
+                        );
+                    }
+                }
+
                 $assignStart = ! empty($assignment['mulai']) ? Carbon::parse($assignment['mulai'])->startOfDay() : null;
                 $assignEnd = ! empty($assignment['selesai']) ? Carbon::parse($assignment['selesai'])->startOfDay() : null;
 
@@ -133,6 +150,16 @@ class CreateActivityRequest extends FormRequest
                     $validator->errors()->add(
                         "assignments.{$index}.selesai",
                         'Tanggal selesai penugasan harus berada dalam periode kegiatan.'
+                    );
+                }
+
+                $effectiveStart = $assignStart ?? $activityStart;
+                $effectiveEnd = $assignEnd ?? $activityEnd;
+
+                if ($effectiveStart && $effectiveEnd && $workloadService->countWorkdays($effectiveStart, $effectiveEnd) === 0) {
+                    $validator->errors()->add(
+                        "assignments.{$index}.mulai",
+                        'Periode penugasan tidak memuat satu pun hari kerja (Senin-Jumat, di luar hari libur).'
                     );
                 }
             }
@@ -167,8 +194,6 @@ class CreateActivityRequest extends FormRequest
             'mulai.date' => 'Format tanggal mulai tidak valid.',
             'selesai.date' => 'Format tanggal selesai tidak valid.',
             'selesai.after_or_equal' => 'Tanggal selesai tidak boleh sebelum tanggal mulai kegiatan.',
-            'bobot.min' => 'Bobot kegiatan minimal 0,50.',
-            'bobot.max' => 'Bobot kegiatan maksimal 3,00.',
             'assignments.required' => 'Minimal satu penugasan wajib disertakan, dengan satu Penanggung Jawab.',
             'assignments.min' => 'Minimal satu penugasan wajib disertakan, dengan satu Penanggung Jawab.',
             'assignments.array' => 'Format daftar penugasan tidak valid.',
@@ -176,9 +201,12 @@ class CreateActivityRequest extends FormRequest
             'assignments.*.user_id.exists' => 'Pegawai tidak ditemukan.',
             'assignments.*.peran.required' => 'Peran penugasan wajib diisi.',
             'assignments.*.peran.max' => 'Peran penugasan maksimal 60 karakter.',
-            'assignments.*.volume.required' => 'Volume penugasan wajib diisi.',
+            'assignments.*.jam_per_hari.required' => 'Jam per hari wajib diisi.',
+            'assignments.*.jam_per_hari.numeric' => 'Jam per hari harus berupa angka.',
+            'assignments.*.jam_per_hari.min' => 'Jam per hari minimal 0,25 jam.',
+            'assignments.*.jam_per_hari.max' => 'Jam per hari tidak boleh melebihi jam kerja per hari pada pengaturan.',
+            'assignments.*.volume.numeric' => 'Volume penugasan harus berupa angka.',
             'assignments.*.volume.min' => 'Volume penugasan minimal 0.01.',
-            'assignments.*.satuan.required' => 'Satuan penugasan wajib dipilih.',
             'assignments.*.satuan.in' => 'Satuan penugasan tidak valid.',
         ];
     }

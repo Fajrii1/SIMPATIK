@@ -165,7 +165,7 @@ class DatabaseSchemaTest extends TestCase
         $schema = Schema::connection($this->connection);
 
         $expectedColumns = [
-            'id', 'activity_id', 'team_id', 'pelapor_id', 'minggu_mulai',
+            'id', 'activity_id', 'team_id', 'pelapor_id', 'bulan',
             'kendala', 'solusi', 'tindak_lanjut', 'pic_id', 'tenggat',
             'status', 'catatan_penutupan', 'ditutup_pada',
             'created_at', 'updated_at', 'deleted_at',
@@ -204,7 +204,7 @@ class DatabaseSchemaTest extends TestCase
         $indexes = [
             'activities' => 'idx_activities_team_timeline',
             'assignments' => 'idx_assignments_user_timeline',
-            'weekly_issues' => 'idx_weekly_issues_team_week_status',
+            'weekly_issues' => 'idx_weekly_issues_team_month_status',
             'notifications' => 'idx_notifications_user_read',
         ];
 

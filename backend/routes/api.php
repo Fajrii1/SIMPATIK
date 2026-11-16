@@ -36,58 +36,59 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
         // Dashboard Adaptif Multi-Role
         Route::get('dashboard', [DashboardController::class, 'index']);
 
-        // Manajemen Pengguna (Khusus Admin)
-        Route::apiResource('users', UserController::class);
-        Route::patch('users/{user}/status', [UserController::class, 'updateStatus']);
-        Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword']);
-
-        // Manajemen Tim Kerja & Keanggotaan
-        Route::apiResource('teams', TeamController::class);
-        Route::get('teams/{team}/members', [TeamController::class, 'members']);
-        Route::post('teams/{team}/members', [TeamController::class, 'addMember']);
-        Route::delete('teams/{team}/members/{user}', [TeamController::class, 'removeMember']);
-
-        // Pengaturan Sistem
-        Route::get('settings', [SettingController::class, 'index']);
-        Route::match(['put', 'patch'], 'settings', [SettingController::class, 'update']);
-
-        // Manajemen Kegiatan Statistik (PRD Bagian 14)
-        Route::apiResource('activities', ActivityController::class);
-        Route::patch('activities/{activity}/complete', [ActivityController::class, 'complete']);
-        Route::patch('activities/{activity}/reopen', [ActivityController::class, 'reopen']);
-
-        // Penugasan Pegawai ke Kegiatan & Pratinjau Beban Kerja (PRD Bagian 14)
-        Route::get('activities/{activity}/assignments', [AssignmentController::class, 'indexForActivity']);
-        Route::get('activities/{activity}/assignment-candidates', [AssignmentController::class, 'candidates']);
-        Route::post('activities/{activity}/assignments', [AssignmentController::class, 'storeForActivity']);
-        Route::post('assignments/preview', [AssignmentController::class, 'preview']);
-        Route::post('assignments/preview-batch', [AssignmentController::class, 'previewBatch']);
-        Route::apiResource('assignments', AssignmentController::class)->only(['show', 'update', 'destroy']);
-
-        // Monitoring Beban Kerja (PRD Bagian 14)
+        // Monitoring Beban Kerja (PRD Bagian 14) - tetap terbuka untuk pimpinan.
         Route::get('workload', [WorkloadController::class, 'index']);
         Route::get('workload/warnings', [WorkloadController::class, 'warnings']);
         Route::get('workload/users/{id}', [WorkloadController::class, 'userDetail']);
 
-        // Kalender Kegiatan Lintas Tim (PRD Bagian 14)
-        Route::get('calendar', [CalendarController::class, 'index']);
+        // Pimpinan hanya memantau dashboard dan monitoring.
+        Route::middleware('not.pimpinan')->group(function () {
+            // Manajemen Pengguna (Khusus Admin)
+            Route::apiResource('users', UserController::class);
+            Route::patch('users/{user}/status', [UserController::class, 'updateStatus']);
+            Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword']);
 
-        // Kendala Mingguan (PRD Bagian 14)
-        Route::get('issues/carried', [WeeklyIssueController::class, 'carried']);
-        Route::patch('issues/{id}/status', [WeeklyIssueController::class, 'updateStatus']);
-        Route::apiResource('issues', WeeklyIssueController::class);
+            // Manajemen Tim Kerja & Keanggotaan
+            Route::apiResource('teams', TeamController::class);
+            Route::get('teams/{team}/members', [TeamController::class, 'members']);
+            Route::post('teams/{team}/members', [TeamController::class, 'addMember']);
+            Route::delete('teams/{team}/members/{user}', [TeamController::class, 'removeMember']);
 
-        // Notifikasi In-App (PRD Bagian 14)
-        Route::get('notifications', [NotificationController::class, 'index']);
-        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
-        Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
-        Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+            // Pengaturan Sistem
+            Route::get('settings', [SettingController::class, 'index']);
+            Route::match(['put', 'patch'], 'settings', [SettingController::class, 'update']);
 
-        // Audit Log (Khusus Admin)
+            // Manajemen Kegiatan Statistik (PRD Bagian 14)
+            Route::apiResource('activities', ActivityController::class);
+            Route::patch('activities/{activity}/complete', [ActivityController::class, 'complete']);
+            Route::patch('activities/{activity}/reopen', [ActivityController::class, 'reopen']);
 
-        // Pelaporan dan Ekspor (PDF/CSV)
-        Route::get('reports/workload', [ReportController::class, 'workloadReport']);
-        Route::get('reports/activities', [ReportController::class, 'activitiesReport']);
-        Route::get('reports/issues', [ReportController::class, 'issuesReport']);
+            // Penugasan Pegawai ke Kegiatan & Pratinjau Beban Kerja (PRD Bagian 14)
+            Route::get('activities/{activity}/assignments', [AssignmentController::class, 'indexForActivity']);
+            Route::get('activities/{activity}/assignment-candidates', [AssignmentController::class, 'candidates']);
+            Route::post('activities/{activity}/assignments', [AssignmentController::class, 'storeForActivity']);
+            Route::post('assignments/preview', [AssignmentController::class, 'preview']);
+            Route::post('assignments/preview-batch', [AssignmentController::class, 'previewBatch']);
+            Route::apiResource('assignments', AssignmentController::class)->only(['show', 'update', 'destroy']);
+
+            // Kalender Kegiatan Lintas Tim (PRD Bagian 14)
+            Route::get('calendar', [CalendarController::class, 'index']);
+
+            // Kendala Bulanan (PRD Bagian 14)
+            Route::get('issues/carried', [WeeklyIssueController::class, 'carried']);
+            Route::patch('issues/{id}/status', [WeeklyIssueController::class, 'updateStatus']);
+            Route::apiResource('issues', WeeklyIssueController::class);
+
+            // Notifikasi In-App (PRD Bagian 14)
+            Route::get('notifications', [NotificationController::class, 'index']);
+            Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+            Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+            Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+
+            // Pelaporan dan Ekspor (PDF/CSV)
+            Route::get('reports/workload', [ReportController::class, 'workloadReport']);
+            Route::get('reports/activities', [ReportController::class, 'activitiesReport']);
+            Route::get('reports/issues', [ReportController::class, 'issuesReport']);
+        });
     });
 });

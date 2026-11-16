@@ -65,7 +65,7 @@ class UserController extends Controller
             });
         }
 
-        $perPage = min(max($request->integer('per_page', 15), 1), 100);
+        $perPage = min(max($request->integer('per_page', 10), 1), 50);
         $users = $query->orderBy('nama')->paginate($perPage);
 
         return UserResource::collection($users);

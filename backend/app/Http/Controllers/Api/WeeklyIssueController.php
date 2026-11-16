@@ -19,7 +19,7 @@ use Illuminate\Support\Collection;
 class WeeklyIssueController extends Controller
 {
     /**
-     * Daftar kendala mingguan dengan filter minggu, status, dan tim.
+     * Daftar kendala bulanan dengan filter bulan, status, dan tim.
      * GET /api/issues
      */
     public function index(Request $request): AnonymousResourceCollection
@@ -35,9 +35,13 @@ class WeeklyIssueController extends Controller
             $query->where('status', $request->query('status'));
         }
 
-        if ($request->has('week') && ! empty($request->query('week'))) {
-            $weekStart = Carbon::parse($request->query('week'))->startOfWeek(Carbon::MONDAY)->toDateString();
-            $query->where('minggu_mulai', $weekStart);
+        // Filter bulan: menerima format Y-m atau Y-m-d.
+        if ($request->has('bulan') && ! empty($request->query('bulan'))) {
+            $monthStart = Carbon::parse($request->query('bulan'))->startOfMonth()->toDateString();
+            $query->where('bulan', $monthStart);
+        } elseif ($request->has('month') && ! empty($request->query('month'))) {
+            $monthStart = Carbon::parse($request->query('month'))->startOfMonth()->toDateString();
+            $query->where('bulan', $monthStart);
         }
 
         // Hak akses PRD:
@@ -51,25 +55,28 @@ class WeeklyIssueController extends Controller
                     ->orWhere('pelapor_id', $currentUser->id)
                     ->orWhere('pic_id', $currentUser->id);
             });
+        } elseif ($role === 'pimpinan') {
+            return WeeklyIssueResource::collection(WeeklyIssue::query()->whereRaw('1 = 0')->paginate(10));
         }
 
-        $issues = $query->orderByDesc('minggu_mulai')->orderByDesc('id')->paginate(15);
+        $perPage = min(max($request->integer('per_page', 10), 1), 50);
+        $issues = $query->orderByDesc('bulan')->orderByDesc('id')->paginate($perPage);
 
         return WeeklyIssueResource::collection($issues);
     }
 
     /**
-     * Kendala terbawa dari minggu-minggu sebelumnya yang belum berstatus 'selesai'.
-     * GET /api/issues/carried?week=YYYY-MM-DD&team_id=X
+     * Kendala terbawa dari bulan-bulan sebelumnya yang belum berstatus 'selesai'.
+     * GET /api/issues/carried?bulan=YYYY-MM&team_id=X
      */
     public function carried(Request $request): JsonResponse
     {
         $currentUser = $request->user();
-        $weekDate = $request->query('week', Carbon::now()->toDateString());
-        $currentWeekMonday = Carbon::parse($weekDate)->startOfWeek(Carbon::MONDAY)->toDateString();
+        $monthInput = $request->query('bulan', $request->query('month', Carbon::now()->toDateString()));
+        $currentMonthStart = Carbon::parse($monthInput)->startOfMonth()->toDateString();
 
         $query = WeeklyIssue::with(['activity', 'team', 'pelapor', 'pic'])
-            ->where('minggu_mulai', '<', $currentWeekMonday)
+            ->where('bulan', '<', $currentMonthStart)
             ->where('status', '!=', StatusKendala::SELESAI->value);
 
         if ($request->has('team_id') && ! empty($request->query('team_id'))) {
@@ -84,12 +91,14 @@ class WeeklyIssueController extends Controller
                     ->orWhere('pelapor_id', $currentUser->id)
                     ->orWhere('pic_id', $currentUser->id);
             });
+        } elseif ($role === 'pimpinan') {
+            $query->whereRaw('1 = 0');
         }
 
-        $carriedIssues = $query->orderBy('minggu_mulai')->get();
+        $carriedIssues = $query->orderBy('bulan')->get();
 
         return response()->json([
-            'minggu_acuan' => $currentWeekMonday,
+            'bulan_acuan' => $currentMonthStart,
             'total_terbawa' => $carriedIssues->count(),
             'data' => WeeklyIssueResource::collection($carriedIssues),
         ]);
@@ -104,16 +113,14 @@ class WeeklyIssueController extends Controller
         $currentUser = $request->user();
         $data = $request->validated();
 
-        // Pastikan minggu_mulai diselaraskan ke hari Senin (PRD 8.5)
-        $mingguMulai = Carbon::parse($data['minggu_mulai'])->startOfWeek(Carbon::MONDAY)->toDateString();
-        $data['minggu_mulai'] = $mingguMulai;
+        // Pastikan periode diselaraskan ke tanggal 1 bulan terkait (PRD 8.5).
+        $bulan = Carbon::parse($data['bulan'])->startOfMonth()->toDateString();
+        $data['bulan'] = $bulan;
         $data['pelapor_id'] = $currentUser->id;
         $data['status'] = StatusKendala::TERBUKA;
 
         $issue = WeeklyIssue::create($data);
         $issue->load(['activity', 'team', 'pelapor', 'pic']);
-
-        // Log audit
 
         // Kirim notifikasi ke Ketua Tim jika pelapor bukan ketua
         $team = $issue->team;
@@ -137,7 +144,7 @@ class WeeklyIssueController extends Controller
         }
 
         return response()->json([
-            'message' => 'Kendala mingguan berhasil dilaporkan.',
+            'message' => 'Kendala bulanan berhasil dilaporkan.',
             'data' => new WeeklyIssueResource($issue),
         ], 201);
     }
@@ -206,8 +213,8 @@ class WeeklyIssueController extends Controller
         $oldPicId = $issue->getOriginal('pic_id');
 
         $data = $request->validated();
-        if (isset($data['minggu_mulai'])) {
-            $data['minggu_mulai'] = Carbon::parse($data['minggu_mulai'])->startOfWeek(Carbon::MONDAY)->toDateString();
+        if (isset($data['bulan'])) {
+            $data['bulan'] = Carbon::parse($data['bulan'])->startOfMonth()->toDateString();
         }
 
         $issue->update($data);
@@ -315,7 +322,7 @@ class WeeklyIssueController extends Controller
         $issue->delete();
 
         return response()->json([
-            'message' => 'Kendala mingguan berhasil dihapus.',
+            'message' => 'Kendala bulanan berhasil dihapus.',
         ]);
     }
 

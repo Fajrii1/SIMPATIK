@@ -60,19 +60,18 @@ class AssignmentController extends Controller
             $assignment = $activity->assignments()->create([
                 'user_id' => $validated['user_id'],
                 'peran' => $validated['peran'],
-                'volume' => $validated['volume'],
-                'satuan' => $validated['satuan'],
+                'jam_per_hari' => $validated['jam_per_hari'],
+                'volume' => $validated['volume'] ?? null,
+                'satuan' => $validated['satuan'] ?? null,
                 'mulai' => $validated['mulai'] ?? null,
                 'selesai' => $validated['selesai'] ?? null,
             ]);
-
-            // Catat log audit (PRD Bagian 8.4)
 
             // Kirim notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             Notification::create([
                 'user_id' => $assignment->user_id,
                 'tipe' => 'penugasan_baru',
-                'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->volume} {$assignment->satuan}).",
+                'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->jam_per_hari} jam/hari).",
                 'tautan' => "/kegiatan/{$activity->id}",
             ]);
 
@@ -126,8 +125,6 @@ class AssignmentController extends Controller
             $assignment->update($validated);
             $sesudah = $assignment->fresh()->toArray();
 
-            // Catat log audit
-
             // Kirim notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             Notification::create([
                 'user_id' => $assignment->user_id,
@@ -164,8 +161,6 @@ class AssignmentController extends Controller
             $userId = $assignment->user_id;
 
             $assignment->delete();
-
-            // Catat log audit
 
             // Kirim notifikasi ke pegawai yang penugasannya dihapus (PRD Bagian 8.6)
             Notification::create([

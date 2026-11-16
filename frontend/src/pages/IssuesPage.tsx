@@ -48,7 +48,7 @@ const aksiLabel = (aksi: string): string => {
 const emptyForm = {
   team_id: '',
   activity_id: '',
-  minggu_mulai: '',
+  bulan: '',
   kendala: '',
   solusi: '',
   tindak_lanjut: '',
@@ -217,7 +217,7 @@ export const IssuesPage: React.FC = () => {
       setIssues(issueRes.data?.data ?? []);
       setCarriedIssues(carriedRes.data?.data ?? []);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Gagal memuat data kendala mingguan.'));
+      setError(getApiErrorMessage(err, 'Gagal memuat data kendala bulanan.'));
     } finally {
       setLoading(false);
     }
@@ -323,7 +323,7 @@ export const IssuesPage: React.FC = () => {
     setEditFormData({
       team_id: String(item.team_id),
       activity_id: item.activity_id ? String(item.activity_id) : '',
-      minggu_mulai: item.minggu_mulai,
+      bulan: item.bulan,
       kendala: item.kendala,
       solusi: item.solusi ?? '',
       tindak_lanjut: item.tindak_lanjut ?? '',
@@ -336,7 +336,7 @@ export const IssuesPage: React.FC = () => {
   const payloadFromForm = (form: typeof emptyForm): Record<string, unknown> => {
     const payload: Record<string, unknown> = {
       team_id: Number(form.team_id),
-      minggu_mulai: form.minggu_mulai,
+      bulan: form.bulan,
       kendala: form.kendala,
     };
 
@@ -361,7 +361,7 @@ export const IssuesPage: React.FC = () => {
       resetCreateForm();
       fetchIssues();
     } catch (err: unknown) {
-      setCreateError(getApiErrorMessage(err, 'Gagal melaporkan kendala mingguan.'));
+      setCreateError(getApiErrorMessage(err, 'Gagal melaporkan kendala bulanan.'));
     } finally {
       setCreateLoading(false);
     }
@@ -531,14 +531,14 @@ export const IssuesPage: React.FC = () => {
             htmlFor={`${prefix}-week`}
             className="block text-xs font-semibold text-slate-700 mb-1"
           >
-            Minggu Mulai Kendala
+            Bulan Kendala
           </label>
           <input
             id={`${prefix}-week`}
-            type="date"
+            type="month"
             required
-            value={formData.minggu_mulai}
-            onChange={(e) => setter({ ...formData, minggu_mulai: e.target.value })}
+            value={formData.bulan}
+            onChange={(e) => setter({ ...formData, bulan: e.target.value })}
             className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600"
           />
         </div>
@@ -680,7 +680,7 @@ export const IssuesPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Kendala Mingguan & Solusi</h1>
+          <h1 className="text-xl font-bold text-slate-900">Kendala Minggu Mulaian & Solusi</h1>
           <p className="text-sm text-slate-500">
             Pencatatan hambatan lapangan, eskalasi ke pimpinan, dan pemantauan tindak lanjut
           </p>
@@ -712,7 +712,7 @@ export const IssuesPage: React.FC = () => {
                 <div>
                   <span className="font-bold text-slate-800">{ci.team?.nama}:</span>{' '}
                   {ci.kendala}
-                  <span className="ml-2 text-slate-400 font-mono">(Sejak {ci.minggu_mulai})</span>
+                  <span className="ml-2 text-slate-400 font-mono">(Sejak {ci.bulan})</span>
                 </div>
                 <button
                   onClick={() => openStatusModal(ci)}
@@ -802,7 +802,7 @@ export const IssuesPage: React.FC = () => {
                     <td className="py-3 px-4 text-slate-600 text-xs">
                       {item.pelapor?.nama || '-'}
                     </td>
-                    <td className="py-3 px-4 text-slate-500 text-xs">{item.minggu_mulai}</td>
+                    <td className="py-3 px-4 text-slate-500 text-xs">{item.bulan}</td>
                     <td className="py-3 px-4 text-slate-500 text-xs">{item.tenggat || '-'}</td>
                     <td className="py-3 px-4">
                       <span
@@ -987,8 +987,8 @@ export const IssuesPage: React.FC = () => {
                     <p className="font-medium text-slate-800">{detailIssue.team?.nama ?? '-'}</p>
                   </div>
                   <div>
-                    <p className="text-slate-400">Minggu Mulai</p>
-                    <p className="font-medium text-slate-800">{detailIssue.minggu_mulai}</p>
+                    <p className="text-slate-400">Bulan</p>
+                    <p className="font-medium text-slate-800">{detailIssue.bulan}</p>
                   </div>
                   <div>
                     <p className="text-slate-400">Pelapor</p>

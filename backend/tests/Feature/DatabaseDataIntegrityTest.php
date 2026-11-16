@@ -115,7 +115,7 @@ class DatabaseDataIntegrityTest extends TestCase
         $assignments = Assignment::all();
         $this->assertGreaterThanOrEqual(30, $assignments->count(), 'Jumlah penugasan harus sekitar 30.');
 
-        // 1. Kasus uji wajib PRD 8.1 (Susenas: volume 60, bobot 1.5, Okt 1 - Nov 15)
+        // 1. Kasus uji wajib PRD 8.1 (Susenas: jam 2 per hari, Okt 1 - Nov 15)
         $p01 = User::where('email', 'pegawai01@contoh.test')->first();
         $susenasAsn = Assignment::where('user_id', $p01->id)
             ->whereHas('activity', fn ($q) => $q->where('nama', 'like', '%Susenas%'))
@@ -125,7 +125,7 @@ class DatabaseDataIntegrityTest extends TestCase
         $this->assertNotNull($susenasAsn);
         $this->assertEquals('2026-10-01', $susenasAsn->mulai->format('Y-m-d'));
         $this->assertEquals('2026-11-15', $susenasAsn->selesai->format('Y-m-d'));
-        $this->assertEquals(1.50, $susenasAsn->activity->bobot);
+        $this->assertEquals(2.00, (float) $susenasAsn->jam_per_hari);
 
         // 2. Pegawai 03 memiliki 3 penugasan beririsan di bulan Oktober (PRD 8.2)
         $p03 = User::where('email', 'pegawai03@contoh.test')->first();
@@ -172,7 +172,8 @@ class DatabaseDataIntegrityTest extends TestCase
      */
     public function test_settings_seeder_default_values(): void
     {
-        $this->assertEquals('100', Setting::getVal('ambang_beban_bulanan'));
+        $this->assertEquals('7', Setting::getVal('jam_kerja_per_hari'));
+        $this->assertEquals('[]', Setting::getVal('hari_libur'));
         $this->assertEquals('3', Setting::getVal('maks_penugasan_bersamaan'));
         $this->assertEquals('3', Setting::getVal('maks_kegiatan_besar_bersamaan'));
         $this->assertEquals('true', Setting::getVal('pegawai_boleh_isi_kendala'));
@@ -235,7 +236,7 @@ class DatabaseDataIntegrityTest extends TestCase
         $tempIssue = WeeklyIssue::create([
             'team_id' => Team::first()->id,
             'pelapor_id' => User::first()->id,
-            'minggu_mulai' => '2026-10-26',
+            'bulan' => '2026-10-26',
             'kendala' => 'Kendala Uji Hapus',
         ]);
         $tempIssue->delete();

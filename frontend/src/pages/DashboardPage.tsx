@@ -92,13 +92,7 @@ export const DashboardPage: React.FC = () => {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
-          <div className="bg-slate-50 p-3 sm:p-4 rounded-lg border border-slate-100">
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium">Total Poin Beban</p>
-            <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">
-              {personal?.poin} <span className="text-xs font-normal text-slate-500">pt</span>
-            </p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-4">
           <div className="bg-slate-50 p-3 sm:p-4 rounded-lg border border-slate-100">
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium">% Terhadap Ambang</p>
             <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">{personal?.persentase}%</p>
@@ -353,7 +347,7 @@ export const DashboardPage: React.FC = () => {
                     <th className="py-3 px-4">Tim</th>
                     <th className="py-3 px-4">Peran</th>
                     <th className="py-3 px-4">Periode</th>
-                    <th className="py-3 px-4">Total poin</th>
+                    <th className="py-3 px-4">Jam/Hari</th>
                     <th className="py-3 px-4">Status</th>
                   </tr>
                 </thead>
@@ -366,7 +360,7 @@ export const DashboardPage: React.FC = () => {
                       <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">
                         {item.mulai} s.d. {item.selesai}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-700 whitespace-nowrap">{item.poin} pt</td>
+                      <td className="py-3 px-4 font-semibold text-slate-700 whitespace-nowrap">{item.jam_per_hari} jam/hari</td>
                       <td className="py-3 px-4">
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-sky-50 text-sky-700 border border-sky-100 whitespace-nowrap">
                           {item.status_kegiatan}
@@ -393,8 +387,8 @@ export const DashboardPage: React.FC = () => {
                     <p><span className="text-slate-400">Periode:</span> {item.mulai} s.d. {item.selesai}</p>
                   </div>
                   <div className="pt-2 border-t border-slate-200/60 flex justify-between items-center text-xs">
-                    <span className="text-slate-500 font-medium">Total poin:</span>
-                    <span className="font-bold text-sky-700">{item.poin} poin</span>
+                    <span className="text-slate-500 font-medium">Jam/hari:</span>
+                    <span className="font-bold text-sky-700">{item.jam_per_hari} jam/hari</span>
                   </div>
                 </div>
               ))}

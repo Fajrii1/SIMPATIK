@@ -149,7 +149,7 @@ class WeeklyIssueManagementTest extends TestCase
         $response = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
             'activity_id' => $this->otherActivity->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Kegiatan yang dipilih milik tim lain.',
         ]);
 
@@ -164,7 +164,7 @@ class WeeklyIssueManagementTest extends TestCase
         $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
             'activity_id' => $this->activity->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Kegiatan yang dipilih satu tim.',
         ])->assertCreated();
     }
@@ -179,7 +179,7 @@ class WeeklyIssueManagementTest extends TestCase
         // PIC bukan anggota tim yang dipilih.
         $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'PIC bukan anggota tim.',
             'pic_id' => $this->otherPegawai->id,
         ])->assertStatus(422)->assertJsonValidationErrors('pic_id');
@@ -197,7 +197,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $response = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'PIC anggota tetapi tidak aktif.',
             'pic_id' => $inactivePic->id,
         ]);
@@ -211,7 +211,7 @@ class WeeklyIssueManagementTest extends TestCase
         // PIC aktif anggota tim tetap diterima.
         $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'PIC anggota tim yang aktif.',
             'pic_id' => $this->pegawai->id,
         ])->assertCreated();
@@ -227,7 +227,7 @@ class WeeklyIssueManagementTest extends TestCase
         $create = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
             'activity_id' => $this->activity->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Detail kendala kontrol Fase 4.',
             'solusi' => 'Solusi terinci untuk diverifikasi.',
             'tindak_lanjut' => 'Tindak lanjut terinci untuk diverifikasi.',
@@ -263,7 +263,7 @@ class WeeklyIssueManagementTest extends TestCase
         $response->assertJsonPath('data.pelapor.nama', 'Ketua Issue Fase 4');
         $response->assertJsonPath('data.pic.nama', 'Pegawai Issue Fase 4');
         $response->assertJsonPath('data.kegiatan.nama', 'Kegiatan Kendala Fase 4');
-        $response->assertJsonPath('data.minggu_mulai', '2032-01-05');
+        $response->assertJsonPath('data.bulan', '2032-01-01');
         $response->assertJsonPath('data.tenggat', '2032-01-20');
         $this->assertNotNull($response->json('data.ditutup_pada'));
 
@@ -281,7 +281,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Otorisasi detail kendala Fase 4.',
             'pic_id' => $this->pegawai->id,
         ]);
@@ -293,9 +293,9 @@ class WeeklyIssueManagementTest extends TestCase
         Sanctum::actingAs($this->admin);
         $this->getJson("/api/issues/{$issueId}")->assertOk();
 
-        // Pimpinan dapat melihat.
+        // Pimpinan hanya memantau dashboard dan monitoring, tidak membuka kendala.
         Sanctum::actingAs($this->pimpinan);
-        $this->getJson("/api/issues/{$issueId}")->assertOk();
+        $this->getJson("/api/issues/{$issueId}")->assertForbidden();
 
         // Ketua tim terkait dapat melihat.
         Sanctum::actingAs($this->ketua);
@@ -319,7 +319,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Otorisasi edit dan hapus Fase 4.',
             'pic_id' => $this->pegawai->id,
         ]);
@@ -331,7 +331,7 @@ class WeeklyIssueManagementTest extends TestCase
         Sanctum::actingAs($this->otherPegawai);
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Ubah dari pihak lain.',
         ])->assertForbidden();
 
@@ -341,7 +341,7 @@ class WeeklyIssueManagementTest extends TestCase
         Sanctum::actingAs($this->pegawai);
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Ubah oleh PIC.',
         ])->assertForbidden();
 
@@ -349,7 +349,7 @@ class WeeklyIssueManagementTest extends TestCase
         Sanctum::actingAs($this->ketua);
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Konten diubah oleh pelapor.',
         ])->assertOk();
 
@@ -370,7 +370,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Kendala dikunci saat selesai Fase 4.',
             'pic_id' => $this->pegawai->id,
         ]);
@@ -387,7 +387,7 @@ class WeeklyIssueManagementTest extends TestCase
         Sanctum::actingAs($this->ketua);
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Ubah pelapor saat terkunci.',
         ])->assertOk();
 
@@ -395,7 +395,7 @@ class WeeklyIssueManagementTest extends TestCase
         Sanctum::actingAs($this->pegawai);
         $payload = [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Ubah PIC saat terkunci.',
         ];
         $blockedUpdate = $this->putJson("/api/issues/{$issueId}", $payload);
@@ -442,7 +442,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Kendala laporan anggota tim Fase 4.',
         ]);
 
@@ -452,7 +452,7 @@ class WeeklyIssueManagementTest extends TestCase
         // Sebelum terkunci, pelapor dapat mengubah kendala.
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Kendala laporan anggota tim Fase 4 (diubah).',
         ])->assertOk();
 
@@ -466,7 +466,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Ubah pelapor biasa saat terkunci.',
         ])->assertStatus(422);
 
@@ -490,7 +490,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Pemberitahuan status Fase 4.',
             'pic_id' => $this->pegawai->id,
         ]);
@@ -550,7 +550,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Satu orang pelapor sekaligus PIC Fase 4.',
             'pic_id' => $this->pegawai->id,
         ]);
@@ -597,7 +597,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $created = $this->postJson('/api/issues', [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Penunjukan ulang PIC Fase 4.',
             'pic_id' => $this->pegawai->id,
         ]);
@@ -609,7 +609,7 @@ class WeeklyIssueManagementTest extends TestCase
 
         $this->putJson("/api/issues/{$issueId}", [
             'team_id' => $this->team->id,
-            'minggu_mulai' => '2032-01-05',
+            'bulan' => '2032-01-01',
             'kendala' => 'Penunjukan ulang PIC Fase 4.',
             'pic_id' => $this->otherPegawai->id,
         ])->assertOk();

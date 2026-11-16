@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <title>Laporan Beban Kerja Pegawai</title>
     <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #1e293b; margin: 20px; }
-        .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #0284c7; padding-bottom: 12px; }
-        .header h2 { margin: 0; color: #0369a1; font-size: 16px; text-transform: uppercase; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10px; color: #1e293b; margin: 20px; }
+        .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #002b6a; padding-bottom: 12px; }
+        .header h2 { margin: 0; color: #002b6a; font-size: 16px; text-transform: uppercase; }
         .header p { margin: 4px 0 0 0; color: #64748b; font-size: 11px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
@@ -23,19 +23,21 @@
     <div class="header">
         <h2>Badan Pusat Statistik Kota Palembang</h2>
         <p>Laporan Beban Kerja Pegawai - Periode {{ $bulan }}</p>
-        <p>Ambang Batas Standar: {{ $ambang }} Poin</p>
+        <p>Jam kerja per hari: {{ $jam_kerja_per_hari }} jam</p>
     </div>
 
     <table>
         <thead>
             <tr>
-                <th style="width: 5%;">No</th>
-                <th style="width: 25%;">Nama Pegawai</th>
-                <th style="width: 20%;">NIP</th>
-                <th style="width: 20%;">Tim Kerja</th>
-                <th style="width: 10%;">Poin</th>
-                <th style="width: 10%;">% Ambang</th>
-                <th style="width: 10%;">Status</th>
+                <th style="width: 4%;">No</th>
+                <th style="width: 20%;">Nama Pegawai</th>
+                <th style="width: 12%;">NIP</th>
+                <th style="width: 16%;">Tim Kerja</th>
+                <th style="width: 9%;">Jam Terpakai</th>
+                <th style="width: 9%;">Kapasitas (Jam)</th>
+                <th style="width: 8%;">% Kapasitas</th>
+                <th style="width: 12%;">Indikator</th>
+                <th style="width: 10%;">Tugas</th>
             </tr>
         </thead>
         <tbody>
@@ -45,7 +47,8 @@
                 <td>{{ $row['nama'] }}</td>
                 <td>{{ $row['nip'] }}</td>
                 <td>{{ $row['tim'] }}</td>
-                <td class="text-right">{{ $row['poin'] }}</td>
+                <td class="text-right">{{ $row['jam_terpakai'] }}</td>
+                <td class="text-right">{{ $row['kapasitas_jam'] }}</td>
                 <td class="text-right">{{ $row['persentase'] }}%</td>
                 <td class="text-center">
                     @if($row['indikator'] === 'aman')
@@ -53,9 +56,10 @@
                     @elseif($row['indikator'] === 'hampir_penuh')
                         <span class="badge-hampir">Hampir Penuh</span>
                     @else
-                        <span class="badge-melebihi">Melebihi Batas</span>
+                        <span class="badge-melebihi">Melebihi Kapasitas</span>
                     @endif
                 </td>
+                <td class="text-center">{{ $row['jumlah_penugasan'] }}</td>
             </tr>
             @endforeach
         </tbody>
@@ -66,4 +70,3 @@
     </div>
 </body>
 </html>
-

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -14,9 +14,10 @@ import {
   AlertTriangle,
   X,
 } from 'lucide-react';
-import { Activity, Team, User, Assignment, AssignmentPreviewResult } from '../types';
+import { Activity, Team, User, Assignment, AssignmentPreviewResult, PageMeta } from '../types';
 import { getApiErrorMessage } from '../services/errors';
 import { ActivityFormModal } from './ActivityFormModal';
+import { Pagination } from '../components/Pagination';
 
 const INDICATOR_LABELS: Record<string, string> = {
   aman: 'Aman',
@@ -26,6 +27,18 @@ const INDICATOR_LABELS: Record<string, string> = {
 
 const ASSIGNMENT_ROLE_OPTIONS = ['Anggota', 'Pengolah Data', 'Pengawas', 'Lainnya'] as const;
 const PJ_ROLE = 'Penanggung Jawab';
+const DEFAULT_JAM_KERJA_PER_HARI = 7;
+const JAM_STEP = 0.25;
+
+const isValidJamPerHari = (value: string, maks: number): boolean => {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < JAM_STEP || num > maks) {
+    return false;
+  }
+
+  const steps = num / JAM_STEP;
+  return Math.abs(steps - Math.round(steps)) < 0.00001;
+};
 
 export const ActivitiesPage: React.FC = () => {
   const { user } = useAuth();
@@ -33,10 +46,14 @@ export const ActivitiesPage: React.FC = () => {
   const idParam = searchParams.get('id');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [assignmentCandidates, setAssignmentCandidates] = useState<User[]>([]);  const [loading, setLoading] = useState(true);
+  const [assignmentCandidates, setAssignmentCandidates] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [meta, setMeta] = useState<PageMeta | null>(null);
+  const [page, setPage] = useState(1);
 
   // Modal Tambah/Edit Kegiatan (komponen ActivityFormModal)
   const [showActivityForm, setShowActivityForm] = useState(false);
@@ -58,15 +75,17 @@ export const ActivitiesPage: React.FC = () => {
     user_id: '',
     peran: 'Anggota',
     peranLainnya: '',
-    volume: '1',
-    satuan: 'Dokumen',
+    jam_per_hari: '1',
+    volume: '',
+    satuan: '',
     mulai: '',
     selesai: '',
   });
+  const [jamKerjaPerHari, setJamKerjaPerHari] = useState(DEFAULT_JAM_KERJA_PER_HARI);
   const [previewResult, setPreviewResult] = useState<AssignmentPreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get('/activities', {
@@ -74,20 +93,30 @@ export const ActivitiesPage: React.FC = () => {
           search: search || undefined,
           team_id: selectedTeam || undefined,
           status: selectedStatus || undefined,
+          page,
         },
       });
       setActivities(res.data.data || []);
+      setMeta(res.data.meta || null);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, selectedTeam, selectedStatus, page]);
 
   const fetchTeams = async () => {
     try {
-      const res = await api.get('/teams');
+      const [res, settingsRes] = await Promise.all([
+        api.get('/teams', { params: { per_page: 50 } }),
+        api.get('/settings').catch(() => null),
+      ]);
       setTeams(res.data.data || []);
+
+      const jamKerja = Number(settingsRes?.data?.settings?.jam_kerja_per_hari);
+      if (Number.isFinite(jamKerja) && jamKerja > 0) {
+        setJamKerjaPerHari(jamKerja);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -126,7 +155,17 @@ export const ActivitiesPage: React.FC = () => {
 
   useEffect(() => {
     fetchActivities();
-  }, [search, selectedTeam, selectedStatus]);
+  }, [fetchActivities]);
+
+  // Pencarian sisi server dengan penundaan singkat.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPage(1);
+      setSearch(searchInput.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   // Buka detail kegiatan otomatis bila ada parameter ?id= di URL.
   useEffect(() => {
@@ -238,8 +277,9 @@ export const ActivitiesPage: React.FC = () => {
       user_id: '',
       peran: 'Anggota',
       peranLainnya: '',
-      volume: '10',
-      satuan: 'Dokumen',
+      jam_per_hari: String(jamKerjaPerHari),
+      volume: '',
+      satuan: '',
       mulai: selectedActivity?.mulai || '',
       selesai: selectedActivity?.selesai || '',
     });
@@ -264,8 +304,9 @@ export const ActivitiesPage: React.FC = () => {
       user_id: String(assignment.user_id),
       peran,
       peranLainnya: peran === 'Lainnya' ? assignment.peran : '',
-      volume: String(assignment.volume ?? 0),
-      satuan: assignment.satuan ?? 'Dokumen',
+      jam_per_hari: String(assignment.jam_per_hari ?? 1),
+      volume: assignment.volume !== null && assignment.volume !== undefined ? String(assignment.volume) : '',
+      satuan: assignment.satuan ?? '',
       mulai: assignment.mulai ?? '',
       selesai: assignment.selesai ?? '',
     });
@@ -286,9 +327,9 @@ export const ActivitiesPage: React.FC = () => {
     if (!showAssignmentModal || !selectedActivity) return undefined;
 
     const userId = Number(assignmentForm.user_id);
-    const volume = Number(assignmentForm.volume);
+    const jamValid = isValidJamPerHari(assignmentForm.jam_per_hari, jamKerjaPerHari);
 
-    if (!userId || !Number.isFinite(volume) || volume <= 0) {
+    if (!userId || !jamValid) {
       setPreviewResult(null);
       setPreviewError('');
       setPreviewLoading(false);
@@ -306,8 +347,9 @@ export const ActivitiesPage: React.FC = () => {
           peran: assignmentForm.peran === 'Lainnya'
             ? assignmentForm.peranLainnya.trim() || 'Lainnya'
             : assignmentForm.peran,
-          volume,
-          satuan: assignmentForm.satuan,
+          jam_per_hari: Number(assignmentForm.jam_per_hari),
+          volume: assignmentForm.volume.trim() === '' ? undefined : Number(assignmentForm.volume),
+          satuan: assignmentForm.satuan || undefined,
           mulai: assignmentForm.mulai || undefined,
           selesai: assignmentForm.selesai || undefined,
           assignment_id: editingAssignment?.id,
@@ -327,9 +369,11 @@ export const ActivitiesPage: React.FC = () => {
     showAssignmentModal,
     selectedActivity,
     editingAssignment,
+    jamKerjaPerHari,
     assignmentForm.user_id,
     assignmentForm.peran,
     assignmentForm.peranLainnya,
+    assignmentForm.jam_per_hari,
     assignmentForm.volume,
     assignmentForm.satuan,
     assignmentForm.mulai,
@@ -343,7 +387,6 @@ export const ActivitiesPage: React.FC = () => {
     setAssignmentError('');
 
     const userId = Number(assignmentForm.user_id);
-    const volume = Number(assignmentForm.volume);
     const peran = assignmentForm.peran === 'Lainnya'
       ? assignmentForm.peranLainnya.trim()
       : assignmentForm.peran;
@@ -351,8 +394,12 @@ export const ActivitiesPage: React.FC = () => {
 
     if (!userId) errors.push('Pegawai yang ditugaskan wajib dipilih.');
     if (!peran) errors.push('Peran penugasan wajib diisi.');
-    if (!Number.isFinite(volume) || volume < 0.01) errors.push('Volume penugasan minimal 0.01.');
-    if (!assignmentForm.satuan) errors.push('Satuan penugasan wajib dipilih.');
+    if (!isValidJamPerHari(assignmentForm.jam_per_hari, jamKerjaPerHari)) {
+      errors.push(`Jam per hari wajib diisi antara 0,25 dan ${jamKerjaPerHari} jam, kelipatan 0,25.`);
+    }
+    if (assignmentForm.volume.trim() !== '' && !(Number(assignmentForm.volume) > 0)) {
+      errors.push('Volume pekerjaan harus berupa angka lebih dari 0 atau dikosongkan.');
+    }
 
     if (assignmentForm.mulai && assignmentForm.mulai < selectedActivity.mulai) {
       errors.push('Tanggal mulai penugasan harus berada dalam periode kegiatan.');
@@ -387,8 +434,9 @@ export const ActivitiesPage: React.FC = () => {
         activity_id: selectedActivity.id,
         user_id: userId,
         peran,
-        volume,
-        satuan: assignmentForm.satuan,
+        jam_per_hari: Number(assignmentForm.jam_per_hari),
+        volume: assignmentForm.volume.trim() === '' ? undefined : Number(assignmentForm.volume),
+        satuan: assignmentForm.satuan || undefined,
         mulai: assignmentForm.mulai || undefined,
         selesai: assignmentForm.selesai || undefined,
       };
@@ -457,15 +505,18 @@ export const ActivitiesPage: React.FC = () => {
           <input
             type="text"
             placeholder="Cari nama kegiatan..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-sky-600 min-h-[40px]"
           />
         </div>
 
         <select
           value={selectedTeam}
-          onChange={(e) => setSelectedTeam(e.target.value)}
+          onChange={(e) => {
+            setSelectedTeam(e.target.value);
+            setPage(1);
+          }}
           className="text-xs sm:text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-sky-600 min-h-[40px]"
         >
           <option value="">Semua Tim Kerja</option>
@@ -476,7 +527,10 @@ export const ActivitiesPage: React.FC = () => {
 
         <select
           value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
+          onChange={(e) => {
+            setSelectedStatus(e.target.value);
+            setPage(1);
+          }}
           className="text-xs sm:text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-sky-600 min-h-[40px]"
         >
           <option value="">Semua Status</option>
@@ -508,7 +562,6 @@ export const ActivitiesPage: React.FC = () => {
                     <th className="py-3 px-4">Tim Penanggung Jawab</th>
                     <th className="py-3 px-4">Jenis</th>
                     <th className="py-3 px-4">Periode</th>
-                    <th className="py-3 px-4">Bobot</th>
                     <th className="py-3 px-4">Petugas</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Aksi</th>
@@ -532,7 +585,6 @@ export const ActivitiesPage: React.FC = () => {
                       <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">
                         {act.mulai} s.d. {act.selesai}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-700">{act.bobot}</td>
                       <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
                         <button
                           onClick={() => handleOpenAssignments(act)}
@@ -662,6 +714,9 @@ export const ActivitiesPage: React.FC = () => {
             </div>
           </>
         )}
+        <div className="px-4 pb-3">
+          <Pagination meta={meta} onPageChange={setPage} disabled={loading} label="kegiatan" />
+        </div>
       </div>
 
       <ActivityFormModal
@@ -682,7 +737,7 @@ export const ActivitiesPage: React.FC = () => {
                   Penugasan Petugas: {selectedActivity.nama}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Tim: {selectedActivity.team?.nama} • Periode: {selectedActivity.mulai} s.d. {selectedActivity.selesai} • Bobot: {selectedActivity.bobot}
+                  Tim: {selectedActivity.team?.nama} • Periode: {selectedActivity.mulai} s.d. {selectedActivity.selesai}
                 </p>
               </div>
               <button
@@ -731,7 +786,10 @@ export const ActivitiesPage: React.FC = () => {
                         </p>
                       ) : (
                         <p className="text-slate-500">
-                          Peran: <strong className="text-slate-700">{as.peran}</strong> • Volume: {as.volume} {as.satuan} • Poin: <strong>{as.poin_total ?? 0} pt</strong>
+                          Peran: <strong className="text-slate-700">{as.peran}</strong> • Jam/hari: <strong>{as.jam_per_hari ?? 0} jam</strong>
+                          {as.volume !== null && as.volume !== undefined && as.satuan
+                            ? ` • Target: ${as.volume} ${as.satuan}`
+                            : ''}
                         </p>
                       )}
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
@@ -837,12 +895,13 @@ export const ActivitiesPage: React.FC = () => {
                   ) : null}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Satuan</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Satuan (Opsional)</label>
                   <select
                     value={assignmentForm.satuan}
                     onChange={(e) => setAssignmentForm({ ...assignmentForm, satuan: e.target.value })}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
                   >
+                    <option value="">-</option>
                     <option value="Dokumen">Dokumen</option>
                     <option value="Blok Sensus">Blok Sensus</option>
                     <option value="Responden">Responden</option>
@@ -853,18 +912,40 @@ export const ActivitiesPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Volume Pekerjaan</label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  required
-                  value={assignmentForm.volume}
-                  onChange={(e) => setAssignmentForm({ ...assignmentForm, volume: e.target.value })}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Jam per Hari <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step={JAM_STEP}
+                    min={JAM_STEP}
+                    max={jamKerjaPerHari}
+                    required
+                    value={assignmentForm.jam_per_hari}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, jam_per_hari: e.target.value })}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Volume Pekerjaan (Opsional)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    value={assignmentForm.volume}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, volume: e.target.value })}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
+                    placeholder="Keterangan target"
+                  />
+                </div>
               </div>
+              <p className="text-[10px] text-slate-500">
+                Jam per hari menentukan beban kerja; volume dan satuan hanya keterangan target. Maksimal {jamKerjaPerHari} jam/hari, kelipatan 0,25.
+              </p>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -908,7 +989,7 @@ export const ActivitiesPage: React.FC = () => {
                   )}
                 </div>
                 <p className="mt-1 text-[10px] text-slate-400">
-                  Dihitung dari WorkloadService berdasarkan volume x bobot, prorata tanggal, dan penugasan lain. Tidak ada data yang disimpan.
+                  Dihitung dari WorkloadService berdasarkan jam per hari dikali hari kerja, prorata tanggal, dan penugasan lain. Tidak ada data yang disimpan.
                 </p>
               </div>
 
@@ -923,10 +1004,13 @@ export const ActivitiesPage: React.FC = () => {
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
                   <div className="flex flex-wrap justify-between gap-1 text-[11px] text-slate-600">
                     <span>
-                      Rencana: <strong>{previewResult.rencana.volume} {previewResult.rencana.satuan}</strong>
+                      Rencana: <strong>{previewResult.rencana.jam_per_hari} jam/hari</strong>
+                      {previewResult.rencana.volume !== null && previewResult.rencana.satuan
+                        ? ` • Target ${previewResult.rencana.volume} ${previewResult.rencana.satuan}`
+                        : ''}
                     </span>
                     <span>
-                      Total <strong>{previewResult.rencana.total_poin} pt</strong> •{' '}
+                      Total <strong>{previewResult.rencana.total_jam} jam</strong> •{' '}
                       {previewResult.rencana.mulai} s.d. {previewResult.rencana.selesai}
                     </span>
                   </div>
@@ -953,17 +1037,17 @@ export const ActivitiesPage: React.FC = () => {
                       <div className="flex justify-between text-slate-600">
                         <span>Beban sebelum</span>
                         <span className="font-semibold">
-                          {impact.beban_sebelum.toFixed(2)} pt ({impact.persentase_sebelum.toFixed(1)}%)
+                          {impact.beban_sebelum.toFixed(2)} jam ({impact.persentase_sebelum.toFixed(1)}%)
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-600">
-                        <span>{editingAssignment ? 'Perubahan beban' : 'Tambahan penugasan'}</span>
-                        <span className="font-semibold text-sky-700">{impact.tambahan_poin >= 0 ? '+' : ''}{impact.tambahan_poin.toFixed(2)} pt</span>
+                        <span>{editingAssignment ? 'Perubahan beban' : 'Tambahan beban'}</span>
+                        <span className="font-semibold text-sky-700">{impact.tambahan_jam >= 0 ? '+' : ''}{impact.tambahan_jam.toFixed(2)} jam</span>
                       </div>
                       <div className="flex justify-between text-slate-700">
                         <span>Beban sesudah</span>
                         <span className="font-bold text-sky-800">
-                          {impact.beban_sesudah.toFixed(2)} pt ({impact.persentase_sesudah.toFixed(1)}%)
+                          {impact.beban_sesudah.toFixed(2)} jam ({impact.persentase_sesudah.toFixed(1)}%)
                         </span>
                       </div>
                       <div className="flex justify-between text-[10px] text-slate-500">
@@ -987,7 +1071,7 @@ export const ActivitiesPage: React.FC = () => {
 
                   {previewResult.peringatan.length === 0 && (
                     <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-800">
-                      Tidak ada peringatan beban atau penugasan bersamaan untuk kombinasi ini.
+                      Tidak ada peringatan kapasitas harian atau penugasan bersamaan untuk kombinasi ini.
                     </p>
                   )}
                 </div>

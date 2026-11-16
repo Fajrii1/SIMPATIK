@@ -100,16 +100,23 @@ export const MainLayout: React.FC = () => {
     user?.peran === "pimpinan" ||
     Boolean(user?.is_ketua);
 
-  const mainNavItems = [
-    { label: "Dashboard", path: "/", icon: LayoutDashboard },
-    { label: "Kalender Kegiatan", path: "/calendar", icon: Calendar },
-    { label: "Daftar Kegiatan", path: "/activities", icon: ClipboardList },
-    { label: "Monitoring Beban Kerja", path: "/workload", icon: BarChart3 },
-    { label: "Kendala Mingguan", path: "/issues", icon: AlertTriangle },
-    ...(canViewReports
-      ? [{ label: "Laporan & Ekspor", path: "/reports", icon: FileSpreadsheet }]
-      : []),
-  ];
+  const isPimpinan = user?.peran === 'pimpinan';
+
+  const mainNavItems = isPimpinan
+    ? [
+        { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { label: 'Monitoring Beban Kerja', path: '/workload', icon: BarChart3 },
+      ]
+    : [
+        { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { label: 'Kalender Kegiatan', path: '/calendar', icon: Calendar },
+        { label: 'Daftar Kegiatan', path: '/activities', icon: ClipboardList },
+        { label: 'Monitoring Beban Kerja', path: '/workload', icon: BarChart3 },
+        { label: 'Kendala Bulanan', path: '/issues', icon: AlertTriangle },
+        ...(canViewReports
+          ? [{ label: 'Laporan & Ekspor', path: '/reports', icon: FileSpreadsheet }]
+          : []),
+      ];
 
   const adminNavItems = [
     { label: "Manajemen Pengguna & Tim", path: "/users", icon: Users },
@@ -339,6 +346,7 @@ export const MainLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            {!isPimpinan && (
             <Link
               to="/notifications"
               className="relative p-2.5 rounded-full hover:bg-white/10 text-white transition min-h-[44px] min-w-[44px] flex items-center justify-center"
@@ -348,10 +356,11 @@ export const MainLayout: React.FC = () => {
               <Bell className="w-5 h-5 text-white" />
               {unreadCount > 0 && (
                 <span className="absolute top-1 right-1 w-4 h-4 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </Link>
+            )}
 
             {/* Profile dropdown */}
             <div className="relative" ref={profileRef}>

@@ -31,7 +31,12 @@ class SettingController extends Controller
             $value = $setting->nilai;
             if ($setting->kunci === 'pegawai_boleh_isi_kendala') {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
-            } elseif (in_array($setting->kunci, ['ambang_beban_bulanan', 'maks_penugasan_bersamaan', 'maks_kegiatan_besar_bersamaan'])) {
+            } elseif ($setting->kunci === 'hari_libur') {
+                $decoded = json_decode((string) $value, true);
+                $value = is_array($decoded) ? $decoded : [];
+            } elseif ($setting->kunci === 'jam_kerja_per_hari') {
+                $value = is_numeric($value) ? (float) $value : $value;
+            } elseif (in_array($setting->kunci, ['maks_penugasan_bersamaan', 'maks_kegiatan_besar_bersamaan'])) {
                 $value = is_numeric($value) ? (int) $value : $value;
             }
             $keyValue[$setting->kunci] = $value;
@@ -53,7 +58,8 @@ class SettingController extends Controller
         $validated = $request->validated();
 
         $knownKeys = [
-            'ambang_beban_bulanan',
+            'jam_kerja_per_hari',
+            'hari_libur',
             'maks_penugasan_bersamaan',
             'maks_kegiatan_besar_bersamaan',
             'pegawai_boleh_isi_kendala',
@@ -101,7 +107,12 @@ class SettingController extends Controller
             $value = $setting->nilai;
             if ($setting->kunci === 'pegawai_boleh_isi_kendala') {
                 $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
-            } elseif (in_array($setting->kunci, ['ambang_beban_bulanan', 'maks_penugasan_bersamaan', 'maks_kegiatan_besar_bersamaan'])) {
+            } elseif ($setting->kunci === 'hari_libur') {
+                $decoded = json_decode((string) $value, true);
+                $value = is_array($decoded) ? $decoded : [];
+            } elseif ($setting->kunci === 'jam_kerja_per_hari') {
+                $value = is_numeric($value) ? (float) $value : $value;
+            } elseif (in_array($setting->kunci, ['maks_penugasan_bersamaan', 'maks_kegiatan_besar_bersamaan'])) {
                 $value = is_numeric($value) ? (int) $value : $value;
             }
             $keyValue[$setting->kunci] = $value;
@@ -118,6 +129,10 @@ class SettingController extends Controller
     {
         if (is_bool($value)) {
             return $value ? 'true' : 'false';
+        }
+
+        if (is_array($value)) {
+            return json_encode(array_values($value), JSON_UNESCAPED_SLASHES) ?: '[]';
         }
 
         return (string) $value;

@@ -41,7 +41,8 @@ class SettingManagementTest extends TestCase
             $response->assertStatus(200)
                 ->assertJsonStructure([
                     'settings' => [
-                        'ambang_beban_bulanan',
+                        'jam_kerja_per_hari',
+                        'hari_libur',
                         'maks_penugasan_bersamaan',
                         'maks_kegiatan_besar_bersamaan',
                         'pegawai_boleh_isi_kendala',
@@ -55,7 +56,8 @@ class SettingManagementTest extends TestCase
                     ],
                 ]);
 
-            $this->assertIsInt($response->json('settings.ambang_beban_bulanan'));
+            $this->assertEqualsWithDelta(7.0, (float) $response->json('settings.jam_kerja_per_hari'), 0.001);
+            $this->assertIsArray($response->json('settings.hari_libur'));
             $this->assertIsBool($response->json('settings.pegawai_boleh_isi_kendala'));
         } finally {
             $tempPegawai->forceDelete();
@@ -80,7 +82,7 @@ class SettingManagementTest extends TestCase
             Sanctum::actingAs($tempPegawai);
 
             $this->putJson('/api/settings', [
-                'ambang_beban_bulanan' => 150,
+                'jam_kerja_per_hari' => 8,
             ])->assertStatus(403);
         } finally {
             $tempPegawai->forceDelete();
@@ -97,30 +99,30 @@ class SettingManagementTest extends TestCase
 
         // 1. Validasi nilai negatif/kurang dari 1
         $this->putJson('/api/settings', [
-            'ambang_beban_bulanan' => 0,
+            'jam_kerja_per_hari' => 0,
         ])->assertStatus(422)
-            ->assertJsonValidationErrors(['ambang_beban_bulanan']);
+            ->assertJsonValidationErrors(['jam_kerja_per_hari']);
 
         // Nilai awal untuk restorasi
-        $originalAmbang = Setting::getVal('ambang_beban_bulanan', '100');
+        $originalJam = Setting::getVal('jam_kerja_per_hari', '7');
         $originalIzin = Setting::getVal('pegawai_boleh_isi_kendala', 'false');
 
         try {
             // 2. Berhasil memperbarui
             $response = $this->putJson('/api/settings', [
-                'ambang_beban_bulanan' => 125,
+                'jam_kerja_per_hari' => 8,
                 'pegawai_boleh_isi_kendala' => true,
             ]);
 
             $response->assertStatus(200)
-                ->assertJsonPath('settings.ambang_beban_bulanan', 125)
+                ->assertJsonPath('settings.jam_kerja_per_hari', 8)
                 ->assertJsonPath('settings.pegawai_boleh_isi_kendala', true);
 
-            $this->assertEquals('125', Setting::getVal('ambang_beban_bulanan'));
+            $this->assertEquals('8', Setting::getVal('jam_kerja_per_hari'));
             $this->assertEquals('true', Setting::getVal('pegawai_boleh_isi_kendala'));
         } finally {
             // Kembalikan ke pengaturan awal seeder
-            Setting::setVal('ambang_beban_bulanan', $originalAmbang);
+            Setting::setVal('jam_kerja_per_hari', $originalJam);
             Setting::setVal('pegawai_boleh_isi_kendala', $originalIzin);
         }
     }

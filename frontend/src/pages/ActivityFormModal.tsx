@@ -31,6 +31,7 @@ interface AssignmentRow {
   user_id: number;
   peran: string;
   peranLainnya: string;
+  jam_per_hari: string;
   volume: string;
   satuan: string;
   mulai: string;
@@ -39,6 +40,8 @@ interface AssignmentRow {
 
 const ROLE_OPTIONS = ['Anggota', 'Pengolah Data', 'Pengawas', 'Lainnya'] as const;
 const SATUAN_OPTIONS = ['Dokumen', 'Blok Sensus', 'Responden', 'Hari', 'Laporan', 'Lainnya'] as const;
+const DEFAULT_JAM_KERJA_PER_HARI = 7;
+const JAM_STEP = 0.25;
 const PJ_ROLE = 'Penanggung Jawab';
 const JENIS_OPTIONS = [
   'Survei',
@@ -56,7 +59,6 @@ const emptyForm = {
   team_id: '',
   mulai: '',
   selesai: '',
-  bobot: '1.0',
   kegiatan_besar: false,
   keterangan: '',
 };
@@ -80,8 +82,9 @@ const buatBaris = (userId: number): AssignmentRow => ({
   user_id: userId,
   peran: 'Anggota',
   peranLainnya: '',
+  jam_per_hari: '1',
   volume: '',
-  satuan: 'Dokumen',
+  satuan: '',
   mulai: '',
   selesai: '',
 });
@@ -114,6 +117,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [jamKerjaPerHari, setJamKerjaPerHari] = useState(DEFAULT_JAM_KERJA_PER_HARI);
 
   const selectableTeams = useMemo(() => {
     if (isAdmin) return teams;
@@ -125,6 +129,16 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     if (!isOpen) return;
 
     const loadCandidates = async () => {
+      try {
+        const settingsRes = await api.get('/settings');
+        const jamKerja = Number(settingsRes.data?.settings?.jam_kerja_per_hari);
+        if (Number.isFinite(jamKerja) && jamKerja > 0) {
+          setJamKerjaPerHari(jamKerja);
+        }
+      } catch {
+        setJamKerjaPerHari(DEFAULT_JAM_KERJA_PER_HARI);
+      }
+
       try {
         if (isAdmin) {
           const res = await api.get('/users', { params: { aktif: true, per_page: 100 } });
@@ -164,7 +178,6 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
         team_id: String(editing.team_id),
         mulai: editing.mulai,
         selesai: editing.selesai,
-        bobot: String(editing.bobot),
         kegiatan_besar: editing.kegiatan_besar,
         keterangan: editing.keterangan ?? '',
       });
@@ -232,17 +245,6 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     [candidates, memberIds]
   );
 
-  const weightedPoin = (row: AssignmentRow): number => {
-    const volume = Number(row.volume);
-    const bobot = Number(formData.bobot);
-
-    if (!Number.isFinite(volume) || !Number.isFinite(bobot)) {
-      return 0;
-    }
-
-    return Math.round(volume * bobot * 100) / 100;
-  };
-
   const addMember = (userId: number) => {
     setMemberIds((current) => (current.includes(userId) ? current : [...current, userId]));
     setMemberSearch('');
@@ -264,19 +266,25 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       return current.map((row, index) =>
         index === 0
           ? row
-          : { ...row, volume: source.volume, satuan: source.satuan }
+          : { ...row, jam_per_hari: source.jam_per_hari, volume: source.volume, satuan: source.satuan }
       );
     });
+  };
+
+  const validJamPerHari = (value: string): boolean => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < JAM_STEP || num > jamKerjaPerHari) {
+      return false;
+    }
+    const steps = num / JAM_STEP;
+    return Math.abs(steps - Math.round(steps)) < 0.00001;
   };
 
   const basicValidForPreview =
     Boolean(formData.team_id) &&
     Boolean(formData.mulai) &&
-    Number.isFinite(Number(formData.bobot)) &&
-    Number(formData.bobot) >= 0.5 &&
-    Number(formData.bobot) <= 3 &&
     rows.length > 0 &&
-    rows.some((row) => Number(row.volume) > 0);
+    rows.every((row) => validJamPerHari(row.jam_per_hari));
 
   // Baris PJ ditampilkan sebagai "Penanggung Jawab" tanpa mengubah peran default baris.
   // Peran efektif inilah yang harus dikirim ke backend, bukan row.peran mentah.
@@ -291,17 +299,15 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     team_id: Number(formData.team_id),
     mulai: formData.mulai,
     selesai: formData.selesai || formData.mulai,
-    bobot: Number(formData.bobot),
-    assignments: rows
-      .filter((row) => row.volume.trim() !== '' && Number(row.volume) > 0)
-      .map((row) => ({
-        user_id: row.user_id,
-        peran: effectivePeran(row),
-        volume: Number(row.volume),
-        satuan: row.satuan,
-        mulai: row.mulai || undefined,
-        selesai: row.selesai || undefined,
-      })),
+    assignments: rows.map((row) => ({
+      user_id: row.user_id,
+      peran: effectivePeran(row),
+      jam_per_hari: Number(row.jam_per_hari),
+      volume: row.volume.trim() === '' ? undefined : Number(row.volume),
+      satuan: row.satuan || undefined,
+      mulai: row.mulai || undefined,
+      selesai: row.selesai || undefined,
+    })),
   });
 
   // Debounce pratinjau batch saat isian yang relevan berubah.
@@ -335,7 +341,6 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     formData.team_id,
     formData.mulai,
     formData.selesai,
-    formData.bobot,
     rows,
     basicValidForPreview,
   ]);
@@ -379,11 +384,6 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     if (!formData.team_id) errors.push('Tim penanggung jawab wajib dipilih.');
     if (!formData.mulai) errors.push('Tanggal mulai kegiatan wajib diisi.');
 
-    const bobot = Number(formData.bobot);
-    if (!Number.isFinite(bobot) || bobot < 0.5 || bobot > 3) {
-      errors.push('Bobot harus berada antara 0,50 dan 3,00.');
-    }
-
     if (formData.mulai && formData.selesai && formData.selesai < formData.mulai) {
       errors.push('Tanggal selesai tidak boleh sebelum tanggal mulai.');
     }
@@ -402,12 +402,14 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     rows.forEach((row) => {
       const label = candidates.find((c) => c.id === row.user_id)?.nama ?? `Pegawai #${row.user_id}`;
 
-      if (row.volume.trim() === '' || !(Number(row.volume) > 0)) {
-        errors.push(`Volume untuk ${label} wajib diisi dan lebih dari 0.`);
+      if (!validJamPerHari(row.jam_per_hari)) {
+        errors.push(
+          `Jam per hari untuk ${label} wajib diisi antara 0,25 dan ${jamKerjaPerHari} jam, kelipatan 0,25.`
+        );
       }
 
-      if (!row.satuan) {
-        errors.push(`Satuan untuk ${label} wajib dipilih.`);
+      if (row.volume.trim() !== '' && !(Number(row.volume) > 0)) {
+        errors.push(`Volume untuk ${label} harus berupa angka lebih dari 0 atau dikosongkan.`);
       }
 
       if (row.peran === 'Lainnya' && !row.peranLainnya.trim()) {
@@ -450,7 +452,6 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       mulai: formData.mulai,
       // Selesai boleh dikosongkan; backend menyamakannya dengan mulai.
       ...(formData.selesai ? { selesai: formData.selesai } : {}),
-      bobot: Number(formData.bobot),
       kegiatan_besar: formData.kegiatan_besar,
       keterangan: formData.keterangan.trim() || null,
     };
@@ -462,8 +463,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
         const assignments = rows.map((row) => ({
           user_id: row.user_id,
           peran: effectivePeran(row),
-          volume: Number(row.volume),
-          satuan: row.satuan,
+          jam_per_hari: Number(row.jam_per_hari),
+          ...(row.volume.trim() !== '' ? { volume: Number(row.volume) } : {}),
+          ...(row.satuan ? { satuan: row.satuan } : {}),
           ...(row.mulai ? { mulai: row.mulai } : {}),
           ...(row.selesai ? { selesai: row.selesai } : {}),
         }));
@@ -603,22 +605,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <div>
-                <label htmlFor="activity-bobot" className="block text-xs font-semibold text-slate-700 mb-1">
-                  Bobot Kesulitan (0,50 - 3,00)
-                </label>
-                <input
-                  id="activity-bobot"
-                  type="number"
-                  step="0.05"
-                  min="0.5"
-                  max="3"
-                  required
-                  value={formData.bobot}
-                  onChange={(e) => setFormData({ ...formData, bobot: e.target.value })}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
-                />
+                <p className="block text-xs font-semibold text-slate-700 mb-1">Jam Kerja per Hari</p>
+                <div className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 text-slate-700 min-h-[40px]">
+                  {jamKerjaPerHari} jam/hari
+                </div>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  1,00 = pekerjaan standar, di atas 1 lebih berat, di bawah 1 lebih ringan
+                  Beban kerja dihitung dari jam per hari dikali jumlah hari kerja pada periode penugasan.
                 </p>
               </div>
 
@@ -748,9 +740,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   <div>
                     <h3 className="text-xs font-bold text-slate-800">Detail Penugasan per Pegawai</h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Volume = jumlah pekerjaan, Satuan = jenis pekerjaan, Poin = volume x bobot
+                      Jam/hari wajib; volume dan satuan hanya keterangan target (opsional).
                     </p>
-                    <p className="text-[11px] text-slate-500">1,00 = pekerjaan standar</p>
                   </div>
                   <button
                     type="button"
@@ -759,7 +750,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 min-h-[36px]"
                   >
                     <Copy className="w-3.5 h-3.5" />
-                    Terapkan volume dan satuan ke semua
+                    Terapkan jam, volume, dan satuan ke semua
                   </button>
                 </div>
 
@@ -784,9 +775,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                         <tr>
                           <th className="py-2 px-2">Pegawai</th>
                           <th className="py-2 px-2">Peran</th>
-                          <th className="py-2 px-2 w-24">Volume *</th>
-                          <th className="py-2 px-2">Satuan *</th>
-                          <th className="py-2 px-2 w-16">Poin</th>
+                          <th className="py-2 px-2 w-24">Jam/Hari *</th>
+                          <th className="py-2 px-2 w-24">Volume</th>
+                          <th className="py-2 px-2">Satuan</th>
                           <th className="py-2 px-2">Indikator</th>
                           {showPeriodAdvanced && <th className="py-2 px-2">Periode</th>}
                         </tr>
@@ -841,13 +832,25 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                               <td className="py-2 px-2">
                                 <input
                                   type="number"
+                                  min={JAM_STEP}
+                                  max={jamKerjaPerHari}
+                                  step={JAM_STEP}
+                                  aria-label={`Jam per hari ${candidate?.nama}`}
+                                  value={row.jam_per_hari}
+                                  onChange={(e) => updateRow(row.key, { jam_per_hari: e.target.value })}
+                                  className="w-20 text-[11px] border border-slate-200 rounded px-2 py-1.5"
+                                />
+                              </td>
+                              <td className="py-2 px-2">
+                                <input
+                                  type="number"
                                   min="0.01"
                                   step="any"
                                   aria-label={`Volume ${candidate?.nama}`}
                                   value={row.volume}
                                   onChange={(e) => updateRow(row.key, { volume: e.target.value })}
                                   className="w-20 text-[11px] border border-slate-200 rounded px-2 py-1.5"
-                                  placeholder="wajib"
+                                  placeholder="opsional"
                                 />
                               </td>
                               <td className="py-2 px-2">
@@ -857,15 +860,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                                   onChange={(e) => updateRow(row.key, { satuan: e.target.value })}
                                   className="text-[11px] border border-slate-200 rounded px-2 py-1.5"
                                 >
+                                  <option value="">-</option>
                                   {SATUAN_OPTIONS.map((satuan) => (
                                     <option key={satuan} value={satuan}>
                                       {satuan}
                                     </option>
                                   ))}
                                 </select>
-                              </td>
-                              <td className="py-2 px-2 font-semibold text-slate-700">
-                                {weightedPoin(row).toFixed(2)}
                               </td>
                               <td className="py-2 px-2">
                                 {indicator ? (
@@ -928,7 +929,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
                     <Info className="mt-0.5 w-3.5 h-3.5 shrink-0 text-slate-400" />
                     <span>
-                      Isi minimal satu volume di atas; pratinjau dihitung otomatis sebelum menyimpan.
+                      Lengkapi tim, tanggal mulai, dan jam per hari; pratinjau dihitung otomatis sebelum menyimpan.
                     </span>
                   </div>
                 )}
@@ -941,8 +942,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                         <span key={impact.bulan} className="text-slate-600">
                           {impact.bulan}: {impact.beban_sebelum.toFixed(2)} →{' '}
                           <span className="font-semibold text-slate-900">
-                            {impact.beban_sesudah.toFixed(2)} pt
-                          </span>
+                            {impact.beban_sesudah.toFixed(2)} jam
+                          </span>{' '}
+                          ({impact.persentase_sesudah.toFixed(0)}%)
                         </span>
                       ))}
                     </div>
@@ -957,7 +959,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
                 {previewWarnings.length === 0 && preview !== null && (
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 font-medium">
-                    Tidak ada peringatan beban atau penugasan bersamaan untuk kombinasi ini.
+                    Tidak ada peringatan kapasitas harian atau penugasan bersamaan untuk kombinasi ini.
                   </div>
                 )}
               </fieldset>

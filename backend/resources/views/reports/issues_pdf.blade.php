@@ -2,11 +2,11 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Laporan Kendala Mingguan</title>
+    <title>Laporan Kendala Bulanan</title>
     <style>
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 9px; color: #1e293b; margin: 16px; }
-        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #0284c7; padding-bottom: 10px; }
-        .header h2 { margin: 0; color: #0369a1; font-size: 15px; text-transform: uppercase; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #002b6a; padding-bottom: 10px; }
+        .header h2 { margin: 0; color: #002b6a; font-size: 15px; text-transform: uppercase; }
         .header p { margin: 4px 0 0 0; color: #64748b; font-size: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th, td { border: 1px solid #cbd5e1; padding: 5px 6px; text-align: left; vertical-align: top; }
@@ -21,10 +21,10 @@
 <body>
     <div class="header">
         <h2>Badan Pusat Statistik Kota Palembang</h2>
-        <p>Laporan Kendala Mingguan</p>
+        <p>Laporan Kendala Bulanan</p>
         <p>
-            @if($week_from || $week_to)
-                Rentang Minggu: {{ $week_from ?? 'awal' }} s.d. {{ $week_to ?? 'akhir' }}
+            @if($month_from || $month_to)
+                Rentang Bulan: {{ $month_from ?? 'awal' }} s.d. {{ $month_to ?? 'akhir' }}
             @endif
             @if($status)
                 &nbsp;|&nbsp; Status: {{ $status }}
@@ -36,20 +36,21 @@
         <thead>
             <tr>
                 <th style="width: 4%;">No</th>
-                <th style="width: 10%;">Minggu Mulai</th>
-                <th style="width: 12%;">Tim</th>
-                <th style="width: 18%;">Kegiatan</th>
-                <th style="width: 22%;">Kendala</th>
+                <th style="width: 8%;">Bulan</th>
+                <th style="width: 10%;">Tim</th>
+                <th style="width: 14%;">Kegiatan</th>
+                <th style="width: 18%;">Kendala</th>
+                <th style="width: 12%;">Solusi</th>
                 <th style="width: 10%;">PIC</th>
-                <th style="width: 9%;">Tenggat</th>
-                <th style="width: 9%;">Status</th>
+                <th style="width: 8%;">Tenggat</th>
+                <th style="width: 8%;">Status</th>
             </tr>
         </thead>
         <tbody>
             @foreach($rows as $idx => $row)
             <tr>
                 <td class="text-center">{{ $idx + 1 }}</td>
-                <td>{{ $row['minggu_mulai'] }}</td>
+                <td>{{ $row['bulan'] }}</td>
                 <td>{{ $row['tim'] }}</td>
                 <td>{{ $row['kegiatan'] }}</td>
                 <td>
@@ -61,6 +62,7 @@
                         <br><br><strong>Catatan penutupan:</strong> {{ $row['catatan_penutupan'] }}
                     @endif
                 </td>
+                <td>{{ $row['solusi'] }}</td>
                 <td>{{ $row['pic'] }}</td>
                 <td>{{ $row['tenggat'] }}</td>
                 <td class="text-center badge-{{ $row['status_key'] }}">{{ $row['status'] }}</td>

@@ -41,7 +41,7 @@ class WeeklyIssueResource extends JsonResource
                     'nip' => $this->pic->nip,
                 ] : null;
             }),
-            'minggu_mulai' => $this->minggu_mulai?->format('Y-m-d'),
+            'bulan' => $this->bulan?->format('Y-m-d'),
             'kendala' => $this->kendala,
             'solusi' => $this->solusi,
             'tindak_lanjut' => $this->tindak_lanjut,

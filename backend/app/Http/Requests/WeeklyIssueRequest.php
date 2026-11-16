@@ -59,6 +59,22 @@ class WeeklyIssueRequest extends FormRequest
     }
 
     /**
+     * Menormalkan periode kendala menjadi tanggal 1 bulan terkait.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('bulan')) {
+            try {
+                $this->merge([
+                    'bulan' => \Carbon\Carbon::parse($this->input('bulan'))->startOfMonth()->toDateString(),
+                ]);
+            } catch (\Throwable) {
+                // Biarkan validasi tanggal menangani nilai yang tidak valid.
+            }
+        }
+    }
+
+    /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
@@ -66,7 +82,7 @@ class WeeklyIssueRequest extends FormRequest
         return [
             'activity_id' => ['nullable', 'exists:activities,id'],
             'team_id' => ['required', 'exists:teams,id'],
-            'minggu_mulai' => ['required', 'date'],
+            'bulan' => ['required', 'date'],
             'kendala' => ['required', 'string', 'max:2000'],
             'solusi' => ['nullable', 'string', 'max:2000'],
             'tindak_lanjut' => ['nullable', 'string', 'max:2000'],
@@ -126,8 +142,8 @@ class WeeklyIssueRequest extends FormRequest
         return [
             'team_id.required' => 'Tim terkait wajib dipilih.',
             'team_id.exists' => 'Tim yang dipilih tidak ditemukan.',
-            'minggu_mulai.required' => 'Minggu mulai kendala wajib diisi.',
-            'minggu_mulai.date' => 'Minggu mulai kendala harus berupa tanggal yang valid.',
+            'bulan.required' => 'Bulan kendala wajib diisi.',
+            'bulan.date' => 'Bulan kendala harus berupa tanggal yang valid.',
             'kendala.required' => 'Uraian kendala wajib diisi.',
             'kendala.string' => 'Uraian kendala harus berupa teks.',
             'kendala.max' => 'Uraian kendala maksimal 2000 karakter.',

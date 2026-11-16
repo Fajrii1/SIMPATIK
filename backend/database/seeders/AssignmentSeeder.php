@@ -344,6 +344,9 @@ class AssignmentSeeder extends Seeder
         ];
 
         foreach ($assignments as $asn) {
+            // Beban kerja dihitung dari jam per hari, bukan volume.
+            $asn['jam_per_hari'] = $asn['jam_per_hari'] ?? 2.00;
+
             Assignment::updateOrCreate(
                 [
                     'activity_id' => $asn['activity_id'],

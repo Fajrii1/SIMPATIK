@@ -16,6 +16,7 @@ class Assignment extends Model
         'activity_id',
         'user_id',
         'peran',
+        'jam_per_hari',
         'volume',
         'satuan',
         'mulai',
@@ -25,6 +26,7 @@ class Assignment extends Model
     protected function casts(): array
     {
         return [
+            'jam_per_hari' => 'decimal:2',
             'volume' => 'decimal:2',
             'mulai' => 'date',
             'selesai' => 'date',

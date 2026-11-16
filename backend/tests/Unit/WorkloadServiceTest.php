@@ -2,54 +2,77 @@
 
 namespace Tests\Unit;
 
+use App\Models\Setting;
 use App\Services\WorkloadService;
 use Tests\TestCase;
 
 class WorkloadServiceTest extends TestCase
 {
     /**
-     * Memverifikasi contoh uji wajib PRD Bagian 8.1:
-     * - Penugasan volume 60, bobot 1.5, periode 1 Oktober sampai 15 November.
-     * - Poin total: 90.
-     * - Total hari: 46 (Oktober 31, November 15).
-     * - Poin Oktober = 90 * 31 / 46 = 60.65
-     * - Poin November = 90 * 15 / 46 = 29.35
+     * Jam penugasan dibagi per bulan berdasarkan hari kerja pada irisan periode.
      */
-    public function test_mandatory_prd_8_1_example_calculation(): void
+    public function test_mandatory_assignment_hours_are_distributed_per_workday(): void
     {
         $service = new WorkloadService;
 
-        $points = $service->calculateAssignmentMonthlyPoints(
-            volume: 60,
-            bobot: 1.5,
+        // 2 jam per hari; Oktober 2026 memiliki 22 hari kerja, 1-15 November 10 hari kerja.
+        $hours = $service->calculateAssignmentMonthlyHours(
+            jamPerHari: 2,
             mulai: '2026-10-01',
             selesai: '2026-11-15'
         );
 
-        $this->assertArrayHasKey('2026-10', $points);
-        $this->assertArrayHasKey('2026-11', $points);
+        $this->assertArrayHasKey('2026-10', $hours);
+        $this->assertArrayHasKey('2026-11', $hours);
 
-        $this->assertEquals(60.65, $points['2026-10']);
-        $this->assertEquals(29.35, $points['2026-11']);
-        $this->assertEquals(90.00, round($points['2026-10'] + $points['2026-11'], 2));
+        $this->assertSame(44.0, $hours['2026-10']['jam']);
+        $this->assertSame(22, $hours['2026-10']['hari_kerja']);
+        $this->assertSame(20.0, $hours['2026-11']['jam']);
+        $this->assertSame(10, $hours['2026-11']['hari_kerja']);
+        $this->assertSame(64.0, round($hours['2026-10']['jam'] + $hours['2026-11']['jam'], 2));
     }
 
     /**
-     * Memverifikasi kalkulasi penugasan satu bulan penuh.
+     * Penugasan satu bulan penuh dihitung dari seluruh hari kerja bulan tersebut.
      */
     public function test_single_month_assignment_calculation(): void
     {
         $service = new WorkloadService;
 
-        $points = $service->calculateAssignmentMonthlyPoints(
-            volume: 50,
-            bobot: 1.0,
+        $hours = $service->calculateAssignmentMonthlyHours(
+            jamPerHari: 3,
             mulai: '2026-05-01',
             selesai: '2026-05-31'
         );
 
-        $this->assertCount(1, $points);
-        $this->assertEquals(50.00, $points['2026-05']);
+        $this->assertCount(1, $hours);
+        // Mei 2026 memiliki 21 hari kerja; 21 x 3 = 63 jam.
+        $this->assertSame(63.0, $hours['2026-05']['jam']);
+        $this->assertSame(21, $hours['2026-05']['hari_kerja']);
+    }
+
+    /**
+     * Hari libur pada pengaturan tidak dihitung sebagai hari kerja.
+     */
+    public function test_holidays_are_excluded_from_workdays(): void
+    {
+        Setting::setVal('hari_libur', json_encode(['2026-05-01']));
+
+        $service = new WorkloadService;
+
+        $this->assertSame(20, $service->countWorkdays('2026-05-01', '2026-05-31'));
+    }
+
+    /**
+     * Jam kerja per hari dari pengaturan dipakai sebagai kapasitas harian.
+     */
+    public function test_daily_work_hours_setting_is_respected(): void
+    {
+        Setting::setVal('jam_kerja_per_hari', 8);
+
+        $service = new WorkloadService;
+
+        $this->assertSame(8.0, $service->getDailyWorkHours());
     }
 
     /**

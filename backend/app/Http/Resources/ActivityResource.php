@@ -22,7 +22,6 @@ class ActivityResource extends JsonResource
             'team' => new TeamResource($this->whenLoaded('team')),
             'mulai' => $this->mulai?->format('Y-m-d'),
             'selesai' => $this->selesai?->format('Y-m-d'),
-            'bobot' => (float) $this->bobot,
             'kegiatan_besar' => (bool) $this->kegiatan_besar,
             'selesai_manual' => (bool) $this->selesai_manual,
             'selesai_pada' => $this->selesai_pada?->toISOString(),

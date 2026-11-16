@@ -20,7 +20,6 @@ class Activity extends Model
         'team_id',
         'mulai',
         'selesai',
-        'bobot',
         'kegiatan_besar',
         'selesai_manual',
         'selesai_pada',
@@ -36,7 +35,6 @@ class Activity extends Model
         return [
             'mulai' => 'date',
             'selesai' => 'date',
-            'bobot' => 'decimal:2',
             'kegiatan_besar' => 'boolean',
             'selesai_manual' => 'boolean',
             'selesai_pada' => 'datetime',

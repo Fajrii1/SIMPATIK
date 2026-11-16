@@ -20,9 +20,11 @@ class NotificationController extends Controller
     {
         $user = $request->user();
 
+        $perPage = min(max($request->integer('per_page', 10), 1), 50);
+
         $notifications = Notification::where('user_id', $user->id)
             ->orderByDesc('id')
-            ->paginate(20);
+            ->paginate($perPage);
 
         return NotificationResource::collection($notifications);
     }
