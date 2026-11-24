@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\TeamController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WeeklyIssueController;
 use App\Http\Controllers\Api\WorkloadController;
+use App\Http\Controllers\Api\WorkTypeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -57,6 +58,13 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
             // Pengaturan Sistem
             Route::get('settings', [SettingController::class, 'index']);
             Route::match(['put', 'patch'], 'settings', [SettingController::class, 'update']);
+
+            // Norma Waktu / Jenis Pekerjaan (ABK)
+            Route::get('work-types/options', [WorkTypeController::class, 'options']);
+            Route::get('work-types', [WorkTypeController::class, 'index']);
+            Route::post('work-types', [WorkTypeController::class, 'store']);
+            Route::match(['put', 'patch'], 'work-types/{workType}', [WorkTypeController::class, 'update']);
+            Route::delete('work-types/{workType}', [WorkTypeController::class, 'destroy']);
 
             // Manajemen Kegiatan Statistik (PRD Bagian 14)
             Route::apiResource('activities', ActivityController::class);

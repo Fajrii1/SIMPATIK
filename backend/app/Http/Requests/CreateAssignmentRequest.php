@@ -6,6 +6,7 @@ use App\Enums\SatuanPenugasan;
 use App\Models\Activity;
 use App\Models\Setting;
 use App\Models\User;
+use App\Models\WorkType;
 use App\Services\WorkloadService;
 use App\Support\PeranPenugasan;
 use Carbon\Carbon;
@@ -44,8 +45,9 @@ class CreateAssignmentRequest extends FormRequest
         return [
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'peran' => ['required', 'string', 'max:60'],
-            'jam_per_hari' => ['required', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7)],
-            'volume' => ['nullable', 'numeric', 'min:0.01'],
+            'work_type_id' => ['nullable', 'integer', 'exists:work_types,id', 'required_without:jam_per_hari'],
+            'jam_per_hari' => ['nullable', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7), 'required_without:work_type_id'],
+            'volume' => ['required', 'numeric', 'min:0.01'],
             'satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
             'mulai' => ['nullable', 'date'],
             'selesai' => ['nullable', 'date'],
@@ -91,9 +93,18 @@ class CreateAssignmentRequest extends FormRequest
                 }
             }
 
-            // 3. jam per hari harus kelipatan 0,25.
+            // 3. jam per hari harus kelipatan 0,25 (mode lama, opsional).
             if ($this->filled('jam_per_hari')) {
                 $this->validateJamStep($validator, 'jam_per_hari', (float) $this->input('jam_per_hari'));
+            }
+
+            // 3b. Jenis pekerjaan harus berstatus aktif.
+            if ($this->filled('work_type_id')) {
+                $workType = WorkType::find($this->integer('work_type_id'));
+
+                if ($workType && ! $workType->aktif) {
+                    $validator->errors()->add('work_type_id', 'Jenis pekerjaan yang dipilih sudah tidak aktif.');
+                }
             }
 
             // 4. Validasi rentang penugasan harus berada dalam periode kegiatan (PRD Bagian 8.4)
@@ -150,6 +161,9 @@ class CreateAssignmentRequest extends FormRequest
             'jam_per_hari.numeric' => 'Jam per hari harus berupa angka.',
             'jam_per_hari.min' => 'Jam per hari minimal 0,25 jam.',
             'jam_per_hari.max' => 'Jam per hari tidak boleh melebihi jam kerja per hari pada pengaturan.',
+            'work_type_id.required_without' => 'Jenis pekerjaan wajib dipilih.',
+            'work_type_id.exists' => 'Jenis pekerjaan tidak ditemukan.',
+            'volume.required' => 'Volume pekerjaan wajib diisi.',
             'volume.numeric' => 'Volume penugasan harus berupa angka.',
             'volume.min' => 'Volume penugasan minimal 0.01.',
             'satuan.in' => 'Satuan penugasan tidak valid.',

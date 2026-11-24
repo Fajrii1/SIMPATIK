@@ -31,11 +31,29 @@ export interface Activity {
   assignments?: Assignment[];
 }
 
+export interface WorkType {
+  id: number;
+  nama: string;
+  satuan: string;
+  norma_menit: number;
+  jenis_norma: 'estimasi' | 'standar';
+  sumber?: string | null;
+  aktif: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Assignment {
   id: number;
   activity_id: number;
   user_id: number;
   peran: string;
+  work_type_id?: number | null;
+  work_type?: WorkType | null;
+  work_type_nama?: string | null;
+  norma_menit?: number | null;
+  total_menit?: number | null;
+  total_jam?: number | null;
   jam_per_hari?: number | null;
   volume?: number | null;
   satuan?: string | null;
@@ -168,6 +186,13 @@ export interface WorkloadAssignmentRow {
   peran: string;
   mulai: string;
   selesai: string;
+  work_type_id?: number | null;
+  work_type_nama?: string | null;
+  volume?: number | null;
+  satuan?: string | null;
+  norma_menit?: number | null;
+  total_menit?: number | null;
+  total_jam?: number | null;
   jam_per_hari: number | null;
   hari_kerja: number;
   jam_terpakai: number | null;
@@ -236,6 +261,9 @@ export interface AssignmentPreviewResult {
   kegiatan: { id: number; nama: string; kegiatan_besar: boolean };
   rencana: {
     peran: string;
+    work_type_id: number | null;
+    norma_menit: number | null;
+    total_menit: number;
     jam_per_hari: number;
     volume: number | null;
     satuan: string | null;

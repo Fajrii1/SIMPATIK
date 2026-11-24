@@ -5,6 +5,12 @@ export interface AssignedUser {
   user_id: number;
   nama: string;
   peran: string;
+  work_type_id?: number | null;
+  work_type_nama?: string | null;
+  norma_menit?: number | null;
+  total_menit?: number | null;
+  total_jam?: number | null;
+  jam_per_hari?: number | null;
   volume?: number | null;
   satuan?: string | null;
   mulai?: string;
@@ -18,7 +24,6 @@ export interface CalendarEventExtendedProps {
   team_nama?: string;
   jenis: string;
   status: string;
-  bobot: number;
   kegiatan_besar: boolean;
   selesai_manual: boolean;
   keterangan?: string | null;
@@ -118,8 +123,8 @@ export interface EmployeeSummary {
   periodStart?: string;
   periodEnd?: string;
   maxConcurrent: number;
-  points: number;
-  peakMonth?: { key: string; label: string; points: number };
+  jam_terpakai: number;
+  peakMonth?: { key: string; label: string; jam: number };
   indicator: WorkloadIndicator;
   metricsHidden?: boolean;
 }
@@ -140,7 +145,6 @@ export interface AddActivityForm {
   jenis: string;
   mulai: string;
   selesai: string;
-  bobot: string;
   keterangan: string;
   kegiatan_besar: boolean;
   assignments: AddAssignmentForm[];

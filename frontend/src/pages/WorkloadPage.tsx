@@ -368,11 +368,27 @@ export const WorkloadPage: React.FC = () => {
                             <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                               {as.mulai} s.d. {as.selesai} • {as.hari_kerja} hari kerja
                             </p>
+                            {as.metrics_visible && as.work_type_nama && (
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                {as.work_type_nama}
+                                {as.volume !== null && as.volume !== undefined
+                                  ? ` • ${as.volume} ${as.satuan ?? ''}`
+                                  : ''}
+                                {as.norma_menit !== null && as.norma_menit !== undefined
+                                  ? ` • norma ${as.norma_menit} menit`
+                                  : ''}
+                              </p>
+                            )}
                           </div>
                           <div className="sm:text-right shrink-0">
                             {as.metrics_visible && as.jam_per_hari !== null ? (
                               <>
                                 <p className="font-bold text-sky-700">{as.jam_terpakai} jam total</p>
+                                {as.total_jam !== null && as.total_jam !== undefined && (
+                                  <p className="text-[11px] text-slate-500">
+                                    Beban tugas {as.total_jam} jam
+                                  </p>
+                                )}
                                 <p className="text-[11px] text-slate-500">{as.jam_per_hari} jam/hari</p>
                               </>
                             ) : (

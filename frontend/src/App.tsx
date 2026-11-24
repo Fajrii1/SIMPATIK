@@ -12,6 +12,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { UsersPage } from './pages/UsersPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { WorkTypesPage } from './pages/WorkTypesPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 
@@ -105,6 +106,14 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute adminOnly>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/work-types"
+              element={
+                <ProtectedRoute adminOnly>
+                  <WorkTypesPage />
                 </ProtectedRoute>
               }
             />

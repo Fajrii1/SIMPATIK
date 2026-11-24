@@ -9,6 +9,7 @@ use App\Http\Resources\ActivityResource;
 use App\Models\Activity;
 use App\Models\Notification;
 use App\Services\WorkloadReminderService;
+use App\Services\WorkloadService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\DB;
 class ActivityController extends Controller
 {
     public function __construct(
-        protected WorkloadReminderService $workloadReminder
+        protected WorkloadReminderService $workloadReminder,
+        protected WorkloadService $workloadService
     ) {}
 
     /**
@@ -119,20 +121,26 @@ class ActivityController extends Controller
 
             // Simpan penugasan awal secara atomik bersama kegiatan (PRD Bagian 14).
             foreach ($validated['assignments'] ?? [] as $assignmentData) {
-                $assignment = $activity->assignments()->create([
+                $abk = $this->workloadService->resolveAssignmentAttributes($assignmentData, $activity);
+
+                $assignment = $activity->assignments()->create(array_merge([
                     'user_id' => $assignmentData['user_id'],
                     'peran' => $assignmentData['peran'],
-                    'jam_per_hari' => $assignmentData['jam_per_hari'],
+                    'jam_per_hari' => $assignmentData['jam_per_hari'] ?? 2,
                     'volume' => $assignmentData['volume'] ?? null,
                     'satuan' => $assignmentData['satuan'] ?? null,
                     'mulai' => $assignmentData['mulai'] ?? null,
                     'selesai' => $assignmentData['selesai'] ?? null,
-                ]);
+                ], $abk));
+
+                $totalJam = $assignment->total_menit !== null
+                    ? round($assignment->total_menit / 60, 2)
+                    : (float) $assignment->jam_per_hari;
 
                 Notification::create([
                     'user_id' => $assignment->user_id,
                     'tipe' => 'penugasan_baru',
-                    'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->jam_per_hari} jam/hari).",
+                    'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$totalJam} jam).",
                     'tautan' => "/kegiatan/{$activity->id}",
                 ]);
             }

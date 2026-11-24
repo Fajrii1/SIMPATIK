@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
 class AssignmentController extends Controller
 {
     public function __construct(
-        protected WorkloadReminderService $workloadReminder
+        protected WorkloadReminderService $workloadReminder,
+        protected WorkloadService $workloadService
     ) {}
 
     /**
@@ -33,7 +34,7 @@ class AssignmentController extends Controller
         $this->authorize('viewAny', Assignment::class);
 
         $assignments = $activity->assignments()
-            ->with(['user', 'activity'])
+            ->with(['user', 'activity', 'workType'])
             ->orderBy('mulai', 'asc')
             ->get();
 
@@ -57,21 +58,27 @@ class AssignmentController extends Controller
         $beforeWarnings = $this->workloadReminder->collectWarnings($userIdsForReminder, $monthsForReminder);
 
         $assignment = DB::transaction(function () use ($validated, $activity, $userIdsForReminder, $monthsForReminder, $beforeWarnings) {
-            $assignment = $activity->assignments()->create([
+            $abk = $this->workloadService->resolveAssignmentAttributes($validated, $activity);
+
+            $assignment = $activity->assignments()->create(array_merge([
                 'user_id' => $validated['user_id'],
                 'peran' => $validated['peran'],
-                'jam_per_hari' => $validated['jam_per_hari'],
+                'jam_per_hari' => $validated['jam_per_hari'] ?? 2,
                 'volume' => $validated['volume'] ?? null,
                 'satuan' => $validated['satuan'] ?? null,
                 'mulai' => $validated['mulai'] ?? null,
                 'selesai' => $validated['selesai'] ?? null,
-            ]);
+            ], $abk));
+
+            $totalJam = $assignment->total_menit !== null
+                ? round($assignment->total_menit / 60, 2)
+                : (float) $assignment->jam_per_hari;
 
             // Kirim notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
             Notification::create([
                 'user_id' => $assignment->user_id,
                 'tipe' => 'penugasan_baru',
-                'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$assignment->jam_per_hari} jam/hari).",
+                'pesan' => "Anda ditugaskan pada kegiatan '{$activity->nama}' sebagai {$assignment->peran} ({$totalJam} jam).",
                 'tautan' => "/kegiatan/{$activity->id}",
             ]);
 
@@ -80,7 +87,7 @@ class AssignmentController extends Controller
             return $assignment;
         });
 
-        return (new AssignmentResource($assignment->load(['user', 'activity'])))
+        return (new AssignmentResource($assignment->load(['user', 'activity', 'workType'])))
             ->response()
             ->setStatusCode(201);
     }
@@ -92,7 +99,7 @@ class AssignmentController extends Controller
     {
         $this->authorize('view', $assignment);
 
-        return new AssignmentResource($assignment->load(['user', 'activity.team']));
+        return new AssignmentResource($assignment->load(['user', 'activity.team', 'workType']));
     }
 
     /**
@@ -122,7 +129,9 @@ class AssignmentController extends Controller
         $updated = DB::transaction(function () use ($assignment, $validated, $userIdsForReminder, $monthsForReminder, $beforeWarnings) {
             $sebelum = $assignment->toArray();
 
-            $assignment->update($validated);
+            $abk = $this->workloadService->resolveAssignmentAttributes($validated, $assignment->activity, $assignment, true);
+
+            $assignment->update(array_merge($validated, $abk));
             $sesudah = $assignment->fresh()->toArray();
 
             // Kirim notifikasi ke pegawai yang ditugaskan (PRD Bagian 8.6)
@@ -138,7 +147,7 @@ class AssignmentController extends Controller
             return $assignment;
         });
 
-        return new AssignmentResource($updated->load(['user', 'activity']));
+        return new AssignmentResource($updated->load(['user', 'activity', 'workType']));
     }
 
     /**

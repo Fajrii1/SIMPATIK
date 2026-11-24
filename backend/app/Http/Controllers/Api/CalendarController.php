@@ -44,7 +44,7 @@ class CalendarController extends Controller
             ? Carbon::parse($validated['end'])->endOfDay()
             : Carbon::now()->endOfMonth();
 
-        $query = Activity::query()->with(['team', 'assignments.user']);
+        $query = Activity::query()->with(['team', 'assignments.user', 'assignments.workType']);
 
         // Cari kegiatan yang beririsan dengan periode kalender
         $query->where('mulai', '<=', $end)
@@ -133,6 +133,11 @@ class CalendarController extends Controller
                             'user_id' => $assignment->user_id,
                             'nama' => $assignment->user?->nama,
                             'peran' => $assignment->peran,
+                            'work_type_id' => $assignment->work_type_id,
+                            'work_type_nama' => $canViewMetrics ? $assignment->workType?->nama : null,
+                            'norma_menit' => $canViewMetrics ? $assignment->norma_menit : null,
+                            'total_menit' => $canViewMetrics ? $assignment->total_menit : null,
+                            'total_jam' => $canViewMetrics && $assignment->total_menit !== null ? round($assignment->total_menit / 60, 2) : null,
                             'jam_per_hari' => $canViewMetrics ? (float) $assignment->jam_per_hari : null,
                             'volume' => $canViewMetrics && $assignment->volume !== null ? (float) $assignment->volume : null,
                             'satuan' => $canViewMetrics ? $assignment->satuan : null,

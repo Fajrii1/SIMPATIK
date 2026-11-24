@@ -6,6 +6,7 @@ use App\Enums\JenisKegiatan;
 use App\Enums\SatuanPenugasan;
 use App\Models\Setting;
 use App\Models\User;
+use App\Models\WorkType;
 use App\Services\WorkloadService;
 use App\Support\PeranPenugasan;
 use Carbon\Carbon;
@@ -60,8 +61,9 @@ class CreateActivityRequest extends FormRequest
             'assignments' => ['required', 'array', 'min:1'],
             'assignments.*.user_id' => ['required', 'integer', 'exists:users,id'],
             'assignments.*.peran' => ['required', 'string', 'max:60'],
-            'assignments.*.jam_per_hari' => ['required', 'numeric', 'min:0.25', 'max:'.$maxJam],
-            'assignments.*.volume' => ['nullable', 'numeric', 'min:0.01'],
+            'assignments.*.work_type_id' => ['nullable', 'integer', 'exists:work_types,id', 'required_without:assignments.*.jam_per_hari'],
+            'assignments.*.jam_per_hari' => ['nullable', 'numeric', 'min:0.25', 'max:'.$maxJam, 'required_without:assignments.*.work_type_id'],
+            'assignments.*.volume' => ['required', 'numeric', 'min:0.01'],
             'assignments.*.satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
             'assignments.*.mulai' => ['nullable', 'date'],
             'assignments.*.selesai' => ['nullable', 'date', 'after_or_equal:mulai'],
@@ -125,6 +127,17 @@ class CreateActivityRequest extends FormRequest
                         $validator->errors()->add(
                             "assignments.{$index}.jam_per_hari",
                             'Jam per hari harus berupa kelipatan 0,25.'
+                        );
+                    }
+                }
+
+                if (! empty($assignment['work_type_id'])) {
+                    $workType = WorkType::find((int) $assignment['work_type_id']);
+
+                    if ($workType && ! $workType->aktif) {
+                        $validator->errors()->add(
+                            "assignments.{$index}.work_type_id",
+                            'Jenis pekerjaan yang dipilih sudah tidak aktif.'
                         );
                     }
                 }
@@ -205,6 +218,9 @@ class CreateActivityRequest extends FormRequest
             'assignments.*.jam_per_hari.numeric' => 'Jam per hari harus berupa angka.',
             'assignments.*.jam_per_hari.min' => 'Jam per hari minimal 0,25 jam.',
             'assignments.*.jam_per_hari.max' => 'Jam per hari tidak boleh melebihi jam kerja per hari pada pengaturan.',
+            'assignments.*.work_type_id.required_without' => 'Jenis pekerjaan wajib dipilih.',
+            'assignments.*.work_type_id.exists' => 'Jenis pekerjaan tidak ditemukan.',
+            'assignments.*.volume.required' => 'Volume pekerjaan wajib diisi.',
             'assignments.*.volume.numeric' => 'Volume penugasan harus berupa angka.',
             'assignments.*.volume.min' => 'Volume penugasan minimal 0.01.',
             'assignments.*.satuan.in' => 'Satuan penugasan tidak valid.',

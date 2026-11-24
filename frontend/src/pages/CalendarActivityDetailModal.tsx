@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, ExternalLink, Star, Users, X } from 'lucide-react';
+import { CalendarDays, Clock, ExternalLink, Star, Users, X } from 'lucide-react';
 import type { CalendarEvent, TeamStyle } from './calendarTypes';
 import {
   PALETTE,
@@ -48,12 +48,10 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
     (assignment) => assignment.metrics_visible !== false
   );
 
-  const totalPoints = allMetricsVisible
-    ? assignments.reduce(
-        (sum, assignment) =>
-          sum + (Number(assignment.volume) || 0) * (Number(event.extendedProps.bobot) || 0),
-        0
-      )
+  const totalJam = allMetricsVisible
+    ? Math.round(
+        assignments.reduce((sum, assignment) => sum + (Number(assignment.total_jam) || 0), 0) * 100
+      ) / 100
     : null;
 
   return (
@@ -128,15 +126,11 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
             label="Jumlah penugasan"
             value={`${event.extendedProps.assignments_count || assignments.length} penugasan`}
           />
-          {totalPoints !== null && (
+          {totalJam !== null && (
             <DetailRow
-              icon={<Star className="h-3.5 w-3.5" />}
-              label="Bobot × total volume"
-              value={`${event.extendedProps.bobot} × ${
-                Math.round(
-                  assignments.reduce((sum, assignment) => sum + (Number(assignment.volume) || 0), 0) * 100
-                ) / 100
-              } = ${Math.round(totalPoints * 100) / 100} poin`}
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Total beban kerja"
+              value={`${totalJam} jam`}
             />
           )}
 
@@ -166,9 +160,6 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
             <div className="mt-2 max-h-64 divide-y divide-[#F1F5FB] overflow-y-auto rounded-lg border border-[#E3EEFA]">
               {assignments.map((assignment, index) => {
                 const metricsVisible = assignment.metrics_visible !== false;
-                const points = metricsVisible
-                  ? (Number(assignment.volume) || 0) * (Number(event.extendedProps.bobot) || 0)
-                  : null;
 
                 return (
                   <div key={`${assignment.user_id}-${index}`} className="px-3 py-2 text-xs">
@@ -191,7 +182,11 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                         <span>
                           Vol. {assignment.volume ?? '-'} {assignment.satuan || ''}
                         </span>
-                        <span>{Math.round((points ?? 0) * 100) / 100} poin</span>
+                        {assignment.work_type_nama && <span>{assignment.work_type_nama}</span>}
+                        {assignment.norma_menit !== null && assignment.norma_menit !== undefined && (
+                          <span>Norma {assignment.norma_menit} menit</span>
+                        )}
+                        <span>{Number(assignment.total_jam) || 0} jam</span>
                         <span>
                           {assignment.mulai && assignment.selesai
                             ? `${formatDateId(assignment.mulai)} - ${formatDateId(assignment.selesai)}`

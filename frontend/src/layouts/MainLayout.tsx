@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   Menu,
   X,
+  Clock,
   User as UserIcon,
 } from "lucide-react";
 import api from "../services/api";
@@ -120,6 +121,7 @@ export const MainLayout: React.FC = () => {
 
   const adminNavItems = [
     { label: "Manajemen Pengguna & Tim", path: "/users", icon: Users },
+    { label: "Norma Waktu", path: "/work-types", icon: Clock },
     { label: "Pengaturan Sistem", path: "/settings", icon: Settings },
   ];
 

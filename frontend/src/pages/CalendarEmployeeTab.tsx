@@ -148,7 +148,7 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
           );
         })}
         <span className="ml-1">
-          Berdasarkan puncak poin bulanan terhadap ambang beban bulanan. Tanda — berarti rincian tidak ditampilkan untuk peran yang tidak berwenang.
+          Berdasarkan puncak jam bulanan terhadap kapasitas jam kerja bulanan. Tanda — berarti rincian tidak ditampilkan untuk peran yang tidak berwenang.
         </span>
       </div>
 
@@ -269,7 +269,7 @@ export const EmployeeTab: React.FC<EmployeeTabProps> = ({
                         </span>
                         {employee.peakMonth && (
                           <span className="mt-1 block text-[10px]" style={{ color: PALETTE.slate }}>
-                            {employee.peakMonth.label}: {employee.peakMonth.points} poin
+                            {employee.peakMonth.label}: {employee.peakMonth.jam} jam
                           </span>
                         )}
                       </>

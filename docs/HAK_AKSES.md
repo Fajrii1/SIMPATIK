@@ -9,6 +9,8 @@ Ada tiga peran sistem: **admin**, **pegawai**, dan **pimpinan**. **Ketua tim buk
 | Fitur | Admin | Pimpinan | Ketua Tim (timnya) | Pegawai |
 |---|---|---|---|---|
 | Kelola pengguna, tim, anggota, ketua tim | Ya | Tidak | Tidak | Tidak |
+| Kelola norma waktu / jenis pekerjaan (ABK) | Ya | Tidak | Tidak | Tidak |
+| Lihat opsi norma waktu aktif untuk form penugasan | Ya | Tidak | Ya | Tidak |
 | Kelola pengaturan sistem | Ya | Tidak | Tidak | Tidak |
 | Lihat riwayat perubahan (audit log) | Ya | Tidak | Tidak | Tidak |
 | Buat dan ubah kegiatan | Ya (semua) | Tidak | Ya (timnya) | Tidak |
@@ -33,4 +35,5 @@ Ada tiga peran sistem: **admin**, **pegawai**, dan **pimpinan**. **Ketua tim buk
 - **Pimpinan** murni pemantau: tidak dapat membuat atau mengubah kegiatan, penugasan, atau kendala.
 - **Akun baru** dibuat admin. Tidak ada pendaftaran mandiri. Akun baru berstatus `must_change_password` dan wajib ganti sandi saat login pertama.
 - **Kendala selesai terkunci**: hanya admin atau ketua tim terkait yang dapat mengubah isi atau membuka kembali; PIC tidak dapat membuka kembali kendala yang sudah selesai.
-- **Volume penugasan** (volume, satuan, poin) hanya terlihat oleh admin, pimpinan, ketua tim dari kegiatan tersebut, dan pemilik penugasan. Lainnya hanya melihat nama dan peran.
+- **Volume penugasan** (jenis pekerjaan, volume, satuan, norma waktu, dan total jam) hanya terlihat oleh admin, pimpinan, ketua tim dari kegiatan tersebut, dan pemilik penugasan. Lainnya hanya melihat nama dan peran.
+- **Norma waktu (ABK)** hanya dikelola admin. Admin dan ketua tim dapat membaca daftar jenis pekerjaan aktif untuk mengisi form penugasan; pimpinan dan pegawai tidak. Jenis pekerjaan yang sudah dipakai pada penugasan tidak dapat dihapus, hanya bisa dinonaktifkan.

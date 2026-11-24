@@ -6,6 +6,7 @@ use App\Models\Activity;
 use App\Models\Assignment;
 use App\Models\Setting;
 use App\Models\User;
+use App\Models\WorkType;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -130,6 +131,194 @@ class WorkloadService
     }
 
     /**
+     * Menyebar total menit beban secara merata ke hari kerja pada periode penugasan.
+     *
+     * @return array<string, array{jam: float, hari_kerja: int, menit: float}>
+     */
+    public function calculateAssignmentMonthlyHoursFromMinutes(
+        int $totalMenit,
+        CarbonInterface|string $mulai,
+        CarbonInterface|string $selesai
+    ): array {
+        $startDate = Carbon::parse($mulai)->startOfDay();
+        $endDate = Carbon::parse($selesai)->startOfDay();
+
+        if ($startDate->gt($endDate)) {
+            return [];
+        }
+
+        $holidays = $this->getHolidayDates();
+        $totalWorkdays = $this->countWorkdays($startDate, $endDate, $holidays);
+
+        if ($totalWorkdays === 0) {
+            return [];
+        }
+
+        $totalHours = $totalMenit / 60;
+        $distribution = [];
+        $currentMonth = $startDate->copy()->startOfMonth();
+        $endMonth = $endDate->copy()->startOfMonth();
+
+        while ($currentMonth->lte($endMonth)) {
+            $monthKey = $currentMonth->format('Y-m');
+            $monthStart = $currentMonth->copy()->startOfMonth();
+            $monthEnd = $currentMonth->copy()->endOfMonth()->startOfDay();
+
+            $overlapStart = $monthStart->gt($startDate) ? $monthStart : $startDate;
+            $overlapEnd = $monthEnd->lt($endDate) ? $monthEnd : $endDate;
+
+            if ($overlapStart->lte($overlapEnd)) {
+                $workdays = $this->countWorkdays($overlapStart, $overlapEnd, $holidays);
+                $ratio = $workdays / $totalWorkdays;
+
+                $distribution[$monthKey] = [
+                    'jam' => round($totalHours * $ratio, 2),
+                    'hari_kerja' => $workdays,
+                    'menit' => round($totalMenit * $ratio, 2),
+                ];
+            }
+
+            $currentMonth->addMonth();
+        }
+
+        return $distribution;
+    }
+
+    /**
+     * Jam per hari efektif sebuah penugasan (hasil sebaran total menit).
+     */
+    public function getAssignmentDailyHours(Assignment $assignment): float
+    {
+        if ($assignment->total_menit === null) {
+            return (float) $assignment->jam_per_hari;
+        }
+
+        $start = $assignment->getEffectiveMulai();
+        $end = $assignment->getEffectiveSelesai();
+
+        if (! $start || ! $end) {
+            return 0.0;
+        }
+
+        $workdays = $this->countWorkdays($start, $end);
+
+        if ($workdays === 0) {
+            return 0.0;
+        }
+
+        return round(($assignment->total_menit / 60) / $workdays, 4);
+    }
+
+    /**
+     * Menyiapkan atribut ABK penugasan dari payload form (jenis pekerjaan + volume).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function resolveAssignmentAttributes(array $data, Activity $activity, ?Assignment $existing = null, bool $onlyProvided = false): array
+    {
+        $has = fn (string $key): bool => array_key_exists($key, $data);
+        $relevant = ['work_type_id', 'jam_per_hari', 'volume', 'mulai', 'selesai'];
+
+        if ($onlyProvided && ! array_intersect($relevant, array_keys($data))) {
+            return [];
+        }
+
+        $workTypeId = $has('work_type_id') ? $data['work_type_id'] : $existing?->work_type_id;
+        $volume = $has('volume') ? $data['volume'] : $existing?->volume;
+        $jamPerHari = $has('jam_per_hari') ? $data['jam_per_hari'] : $existing?->jam_per_hari;
+
+        $mulai = $has('mulai') ? $data['mulai'] : ($existing?->mulai?->toDateString());
+        $selesai = $has('selesai') ? $data['selesai'] : ($existing?->selesai?->toDateString());
+
+        $start = $mulai ?: $activity->mulai?->toDateString();
+        $end = $selesai ?: $activity->selesai?->toDateString();
+        $workdays = ($start && $end) ? $this->countWorkdays($start, $end) : 0;
+
+        if ($workTypeId !== null && $workTypeId !== '') {
+            if ($volume === null || $volume === '') {
+                return [];
+            }
+
+            /** @var WorkType $workType */
+            $workType = WorkType::findOrFail((int) $workTypeId);
+            $totalMenit = (int) round((float) $volume * $workType->norma_menit);
+
+            return [
+                'work_type_id' => $workType->id,
+                'norma_menit' => $workType->norma_menit,
+                'total_menit' => $totalMenit,
+                'satuan' => $workType->satuan,
+                'jam_per_hari' => $workdays > 0 ? round(($totalMenit / 60) / $workdays, 2) : 0,
+            ];
+        }
+
+        if ($jamPerHari !== null && $jamPerHari !== '') {
+            $jam = (float) $jamPerHari;
+
+            return [
+                'total_menit' => (int) round($jam * $workdays * 60),
+                'jam_per_hari' => $jam,
+            ];
+        }
+
+        return [];
+    }
+
+    /**
+     * Menghitung rencana beban dari payload pratinjau (jenis pekerjaan/volume atau data lama).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{total_menit: int, norma_menit: int|null, work_type_id: int|null, satuan: string|null, jam_per_hari: float, total_jam: float}
+     */
+    public function resolveWorkloadForPeriod(array $data, CarbonInterface|string $mulai, CarbonInterface|string $selesai): array
+    {
+        $workdays = $this->countWorkdays($mulai, $selesai);
+        $workTypeId = isset($data['work_type_id']) && $data['work_type_id'] !== '' ? (int) $data['work_type_id'] : null;
+        $volume = isset($data['volume']) && $data['volume'] !== null && $data['volume'] !== '' ? (float) $data['volume'] : null;
+
+        if ($workTypeId !== null) {
+            /** @var WorkType $workType */
+            $workType = WorkType::findOrFail($workTypeId);
+            $totalMenit = (int) round(($volume ?? 0.0) * $workType->norma_menit);
+
+            return [
+                'total_menit' => $totalMenit,
+                'norma_menit' => $workType->norma_menit,
+                'work_type_id' => $workType->id,
+                'satuan' => $workType->satuan,
+                'jam_per_hari' => $workdays > 0 ? round(($totalMenit / 60) / $workdays, 4) : 0.0,
+                'total_jam' => round($totalMenit / 60, 2),
+            ];
+        }
+
+        if (isset($data['total_menit']) && $data['total_menit'] !== null) {
+            $totalMenit = (int) $data['total_menit'];
+
+            return [
+                'total_menit' => $totalMenit,
+                'norma_menit' => isset($data['norma_menit']) ? (int) $data['norma_menit'] : null,
+                'work_type_id' => null,
+                'satuan' => $data['satuan'] ?? null,
+                'jam_per_hari' => $workdays > 0 ? round(($totalMenit / 60) / $workdays, 4) : 0.0,
+                'total_jam' => round($totalMenit / 60, 2),
+            ];
+        }
+
+        $jamPerHari = (float) ($data['jam_per_hari'] ?? 0);
+        $totalMenit = (int) round($jamPerHari * $workdays * 60);
+
+        return [
+            'total_menit' => $totalMenit,
+            'norma_menit' => null,
+            'work_type_id' => null,
+            'satuan' => $data['satuan'] ?? null,
+            'jam_per_hari' => $jamPerHari,
+            'total_jam' => round($totalMenit / 60, 2),
+        ];
+    }
+
+    /**
      * Menghitung puncak jumlah penugasan yang berjalan bersamaan (tumpang tindih pada hari yang sama)
      * dalam satu bulan kalender.
      *
@@ -213,7 +402,7 @@ class WorkloadService
         $monthEnd = $monthDate->copy()->endOfMonth()->startOfDay();
 
         $query = Assignment::query()
-            ->with('activity')
+            ->with(['activity', 'workType'])
             ->where('user_id', $userId)
             ->whereHas('activity', function ($q) {
                 $q->whereNull('deleted_at');
@@ -246,7 +435,20 @@ class WorkloadService
                 $overlapStart = $effectiveStart->gt($monthStart) ? $effectiveStart : $monthStart;
                 $overlapEnd = $effectiveEnd->lt($monthEnd) ? $effectiveEnd : $monthEnd;
                 $workdays = $this->countWorkdays($overlapStart, $overlapEnd, $holidays);
-                $hoursInMonth = round($jamPerHari * $workdays, 2);
+
+                if ($assignment->total_menit !== null) {
+                    $totalWorkdays = $this->countWorkdays($effectiveStart, $effectiveEnd, $holidays);
+                    $hoursInMonth = $totalWorkdays > 0
+                        ? round(($assignment->total_menit / 60) * ($workdays / $totalWorkdays), 2)
+                        : 0.0;
+                    $jamPerHari = $totalWorkdays > 0
+                        ? round(($assignment->total_menit / 60) / $totalWorkdays, 4)
+                        : 0.0;
+                    $totalJam = round($assignment->total_menit / 60, 2);
+                } else {
+                    $hoursInMonth = round($jamPerHari * $workdays, 2);
+                    $totalJam = round($jamPerHari * $this->countWorkdays($effectiveStart, $effectiveEnd, $holidays), 2);
+                }
 
                 $activeAssignmentsCount++;
                 $totalHours += $hoursInMonth;
@@ -256,7 +458,12 @@ class WorkloadService
                     'activity_id' => $activity->id,
                     'activity_nama' => $activity->nama,
                     'peran' => $assignment->peran,
-                    'jam_per_hari' => $jamPerHari,
+                    'work_type_id' => $assignment->work_type_id,
+                    'work_type_nama' => $assignment->workType?->nama,
+                    'norma_menit' => $assignment->norma_menit,
+                    'total_menit' => $assignment->total_menit,
+                    'total_jam' => $totalJam,
+                    'jam_per_hari' => round($jamPerHari, 2),
                     'hari_kerja' => $workdays,
                     'jam_terpakai' => $hoursInMonth,
                     'volume' => $assignment->volume !== null ? (float) $assignment->volume : null,
@@ -451,9 +658,7 @@ class WorkloadService
     {
         $userId = (int) $data['user_id'];
         $activityId = (int) $data['activity_id'];
-        $jamPerHari = (float) $data['jam_per_hari'];
         $volume = isset($data['volume']) && $data['volume'] !== null ? (float) $data['volume'] : null;
-        $satuan = $data['satuan'] ?? null;
         $peran = $data['peran'];
         $excludeAssignmentId = isset($data['assignment_id']) ? (int) $data['assignment_id'] : null;
 
@@ -463,7 +668,11 @@ class WorkloadService
         $mulai = ! empty($data['mulai']) ? Carbon::parse($data['mulai'])->startOfDay() : Carbon::parse($activity->mulai)->startOfDay();
         $selesai = ! empty($data['selesai']) ? Carbon::parse($data['selesai'])->startOfDay() : Carbon::parse($activity->selesai)->startOfDay();
 
-        $simulatedDistribution = $this->calculateAssignmentMonthlyHours($jamPerHari, $mulai, $selesai);
+        $simulatedPlan = $this->resolveWorkloadForPeriod($data, $mulai, $selesai);
+        $totalMenit = $simulatedPlan['total_menit'];
+        $jamPerHari = $simulatedPlan['jam_per_hari'];
+        $satuan = $simulatedPlan['satuan'];
+        $simulatedDistribution = $this->calculateAssignmentMonthlyHoursFromMinutes($totalMenit, $mulai, $selesai);
 
         $oldAssignment = null;
         $oldDistribution = [];
@@ -483,11 +692,9 @@ class WorkloadService
                     ? Carbon::parse($oldAssignment->selesai)->startOfDay()
                     : Carbon::parse($oldActivity->selesai)->startOfDay();
 
-                $oldDistribution = $this->calculateAssignmentMonthlyHours(
-                    (float) $oldAssignment->jam_per_hari,
-                    $oldStart,
-                    $oldEnd
-                );
+                $oldDistribution = $oldAssignment->total_menit !== null
+                    ? $this->calculateAssignmentMonthlyHoursFromMinutes((int) $oldAssignment->total_menit, $oldStart, $oldEnd)
+                    : $this->calculateAssignmentMonthlyHours((float) $oldAssignment->jam_per_hari, $oldStart, $oldEnd);
             }
         }
 
@@ -537,7 +744,7 @@ class WorkloadService
                 $eEnd = $existing->selesai ? Carbon::parse($existing->selesai)->startOfDay() : Carbon::parse($eAct->selesai)->startOfDay();
 
                 if ($eStart->lte($monthEnd) && $eEnd->gte($monthStart)) {
-                    $this->accumulateDailyLoad($dailyLoads, $eStart, $eEnd, $monthStart, $monthEnd, (float) $existing->jam_per_hari, $holidays);
+                    $this->accumulateDailyLoad($dailyLoads, $eStart, $eEnd, $monthStart, $monthEnd, $this->getAssignmentDailyHours($existing), $holidays);
                 }
             }
 
@@ -639,12 +846,15 @@ class WorkloadService
             ],
             'rencana' => [
                 'peran' => $peran,
+                'work_type_id' => $simulatedPlan['work_type_id'],
+                'norma_menit' => $simulatedPlan['norma_menit'],
+                'total_menit' => $totalMenit,
                 'jam_per_hari' => $jamPerHari,
                 'volume' => $volume,
                 'satuan' => $satuan,
                 'mulai' => $mulai->format('Y-m-d'),
                 'selesai' => $selesai->format('Y-m-d'),
-                'total_jam' => round(array_sum(array_column($simulatedDistribution, 'jam')), 2),
+                'total_jam' => $simulatedPlan['total_jam'],
             ],
             'dampak_bulanan' => $monthlyImpacts,
             'peringatan' => $warnings,
@@ -681,6 +891,7 @@ class WorkloadService
                 'user_id' => $userId,
                 'mulai' => $rowMulai,
                 'selesai' => $rowSelesai,
+                '_workload' => $this->resolveWorkloadForPeriod($row, $rowMulai, $rowSelesai),
             ]);
         }
 
@@ -702,7 +913,8 @@ class WorkloadService
             $monthlyAdditions = [];
 
             foreach ($userRows as $row) {
-                foreach ($this->calculateAssignmentMonthlyHours((float) $row['jam_per_hari'], $row['mulai'], $row['selesai']) as $month => $info) {
+                $totalMenit = (int) $row['_workload']['total_menit'];
+                foreach ($this->calculateAssignmentMonthlyHoursFromMinutes($totalMenit, $row['mulai'], $row['selesai']) as $month => $info) {
                     $monthlyAdditions[$month] = round(($monthlyAdditions[$month] ?? 0.0) + $info['jam'], 2);
                 }
             }
@@ -748,12 +960,12 @@ class WorkloadService
                         : Carbon::parse($activity->selesai)->startOfDay();
 
                     $this->countConcurrentDays($dailyCounts, $existingStart, $existingEnd, $monthStart, $monthEnd);
-                    $this->accumulateDailyLoad($dailyLoads, $existingStart, $existingEnd, $monthStart, $monthEnd, (float) $existing->jam_per_hari, $holidays);
+                    $this->accumulateDailyLoad($dailyLoads, $existingStart, $existingEnd, $monthStart, $monthEnd, $this->getAssignmentDailyHours($existing), $holidays);
                 }
 
                 foreach ($userRows as $row) {
                     $this->countConcurrentDays($dailyCounts, $row['mulai'], $row['selesai'], $monthStart, $monthEnd);
-                    $this->accumulateDailyLoad($dailyLoads, $row['mulai'], $row['selesai'], $monthStart, $monthEnd, (float) $row['jam_per_hari'], $holidays);
+                    $this->accumulateDailyLoad($dailyLoads, $row['mulai'], $row['selesai'], $monthStart, $monthEnd, (float) $row['_workload']['jam_per_hari'], $holidays);
                 }
 
                 $concurrencyAfter = max($dailyCounts);

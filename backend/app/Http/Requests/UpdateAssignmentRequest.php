@@ -6,6 +6,7 @@ use App\Enums\SatuanPenugasan;
 use App\Models\Assignment;
 use App\Models\Setting;
 use App\Models\User;
+use App\Models\WorkType;
 use App\Services\WorkloadService;
 use App\Support\PeranPenugasan;
 use Carbon\Carbon;
@@ -44,8 +45,9 @@ class UpdateAssignmentRequest extends FormRequest
         return [
             'user_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
             'peran' => ['sometimes', 'required', 'string', 'max:60'],
-            'jam_per_hari' => ['sometimes', 'required', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7)],
-            'volume' => ['nullable', 'numeric', 'min:0.01'],
+            'work_type_id' => ['sometimes', 'nullable', 'integer', 'exists:work_types,id'],
+            'jam_per_hari' => ['sometimes', 'nullable', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7)],
+            'volume' => ['sometimes', 'required', 'numeric', 'min:0.01'],
             'satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
             'mulai' => ['nullable', 'date'],
             'selesai' => ['nullable', 'date'],
@@ -101,9 +103,26 @@ class UpdateAssignmentRequest extends FormRequest
                 $validator->errors()->add('peran', 'Kegiatan wajib memiliki satu Penanggung Jawab.');
             }
 
-            // 4. jam per hari harus kelipatan 0,25.
+            // 4. jam per hari harus kelipatan 0,25 (mode lama, opsional).
             $newJam = $this->has('jam_per_hari') ? (float) $this->input('jam_per_hari') : (float) $assignment->jam_per_hari;
             $this->validateJamStep($validator, $newJam);
+
+            // 4b. Jenis pekerjaan harus aktif dan volume wajib tersedia untuk perhitungan ABK.
+            $newWorkTypeId = $this->has('work_type_id') ? $this->input('work_type_id') : $assignment->work_type_id;
+
+            if ($newWorkTypeId !== null && $newWorkTypeId !== '') {
+                $workType = WorkType::find((int) $newWorkTypeId);
+
+                if ($workType && ! $workType->aktif) {
+                    $validator->errors()->add('work_type_id', 'Jenis pekerjaan yang dipilih sudah tidak aktif.');
+                }
+
+                $hasVolume = $this->has('volume') ? $this->filled('volume') : $assignment->volume !== null;
+
+                if (! $hasVolume) {
+                    $validator->errors()->add('volume', 'Volume pekerjaan wajib diisi untuk perhitungan beban kerja.');
+                }
+            }
 
             // 5. Validasi rentang penugasan terhadap periode kegiatan
             $actMulai = Carbon::parse($activity->mulai)->startOfDay();
@@ -162,6 +181,8 @@ class UpdateAssignmentRequest extends FormRequest
             'jam_per_hari.numeric' => 'Jam per hari harus berupa angka.',
             'jam_per_hari.min' => 'Jam per hari minimal 0,25 jam.',
             'jam_per_hari.max' => 'Jam per hari tidak boleh melebihi jam kerja per hari pada pengaturan.',
+            'work_type_id.exists' => 'Jenis pekerjaan tidak ditemukan.',
+            'volume.required' => 'Volume pekerjaan wajib diisi.',
             'volume.numeric' => 'Volume penugasan harus berupa angka.',
             'volume.min' => 'Volume penugasan minimal 0.01.',
             'satuan.in' => 'Satuan penugasan tidak valid.',

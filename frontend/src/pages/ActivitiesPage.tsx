@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   X,
 } from 'lucide-react';
-import { Activity, Team, User, Assignment, AssignmentPreviewResult, PageMeta } from '../types';
+import { Activity, Team, User, Assignment, AssignmentPreviewResult, PageMeta, WorkType } from '../types';
 import { getApiErrorMessage } from '../services/errors';
 import { ActivityFormModal } from './ActivityFormModal';
 import { Pagination } from '../components/Pagination';
@@ -27,18 +27,6 @@ const INDICATOR_LABELS: Record<string, string> = {
 
 const ASSIGNMENT_ROLE_OPTIONS = ['Anggota', 'Pengolah Data', 'Pengawas', 'Lainnya'] as const;
 const PJ_ROLE = 'Penanggung Jawab';
-const DEFAULT_JAM_KERJA_PER_HARI = 7;
-const JAM_STEP = 0.25;
-
-const isValidJamPerHari = (value: string, maks: number): boolean => {
-  const num = Number(value);
-  if (!Number.isFinite(num) || num < JAM_STEP || num > maks) {
-    return false;
-  }
-
-  const steps = num / JAM_STEP;
-  return Math.abs(steps - Math.round(steps)) < 0.00001;
-};
 
 export const ActivitiesPage: React.FC = () => {
   const { user } = useAuth();
@@ -75,13 +63,12 @@ export const ActivitiesPage: React.FC = () => {
     user_id: '',
     peran: 'Anggota',
     peranLainnya: '',
-    jam_per_hari: '1',
+    work_type_id: '',
     volume: '',
-    satuan: '',
     mulai: '',
     selesai: '',
   });
-  const [jamKerjaPerHari, setJamKerjaPerHari] = useState(DEFAULT_JAM_KERJA_PER_HARI);
+  const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [previewResult, setPreviewResult] = useState<AssignmentPreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -107,16 +94,12 @@ export const ActivitiesPage: React.FC = () => {
 
   const fetchTeams = async () => {
     try {
-      const [res, settingsRes] = await Promise.all([
+      const [res, workTypeRes] = await Promise.all([
         api.get('/teams', { params: { per_page: 50 } }),
-        api.get('/settings').catch(() => null),
+        api.get('/work-types/options').catch(() => null),
       ]);
       setTeams(res.data.data || []);
-
-      const jamKerja = Number(settingsRes?.data?.settings?.jam_kerja_per_hari);
-      if (Number.isFinite(jamKerja) && jamKerja > 0) {
-        setJamKerjaPerHari(jamKerja);
-      }
+      setWorkTypes(workTypeRes?.data?.data ?? []);
     } catch (err) {
       console.error(err);
     }
@@ -194,6 +177,13 @@ export const ActivitiesPage: React.FC = () => {
       candidate.id === Number(assignmentForm.user_id) ||
       !assignments.some((assignment) => assignment.user_id === candidate.id)
   );
+
+  const selectedWorkType = workTypes.find(
+    (workType) => String(workType.id) === assignmentForm.work_type_id
+  );
+  const plannedTotalJam = selectedWorkType
+    ? Math.round(((Number(assignmentForm.volume) || 0) * selectedWorkType.norma_menit) / 60 * 100) / 100
+    : null;
 
   // Buka Form Tambah Kegiatan
   const handleOpenCreate = () => {
@@ -277,9 +267,8 @@ export const ActivitiesPage: React.FC = () => {
       user_id: '',
       peran: 'Anggota',
       peranLainnya: '',
-      jam_per_hari: String(jamKerjaPerHari),
+      work_type_id: '',
       volume: '',
-      satuan: '',
       mulai: selectedActivity?.mulai || '',
       selesai: selectedActivity?.selesai || '',
     });
@@ -304,9 +293,8 @@ export const ActivitiesPage: React.FC = () => {
       user_id: String(assignment.user_id),
       peran,
       peranLainnya: peran === 'Lainnya' ? assignment.peran : '',
-      jam_per_hari: String(assignment.jam_per_hari ?? 1),
+      work_type_id: assignment.work_type_id ? String(assignment.work_type_id) : '',
       volume: assignment.volume !== null && assignment.volume !== undefined ? String(assignment.volume) : '',
-      satuan: assignment.satuan ?? '',
       mulai: assignment.mulai ?? '',
       selesai: assignment.selesai ?? '',
     });
@@ -327,9 +315,10 @@ export const ActivitiesPage: React.FC = () => {
     if (!showAssignmentModal || !selectedActivity) return undefined;
 
     const userId = Number(assignmentForm.user_id);
-    const jamValid = isValidJamPerHari(assignmentForm.jam_per_hari, jamKerjaPerHari);
+    const volume = Number(assignmentForm.volume);
+    const planValid = Boolean(assignmentForm.work_type_id) && Number.isFinite(volume) && volume > 0;
 
-    if (!userId || !jamValid) {
+    if (!userId || !planValid) {
       setPreviewResult(null);
       setPreviewError('');
       setPreviewLoading(false);
@@ -347,9 +336,8 @@ export const ActivitiesPage: React.FC = () => {
           peran: assignmentForm.peran === 'Lainnya'
             ? assignmentForm.peranLainnya.trim() || 'Lainnya'
             : assignmentForm.peran,
-          jam_per_hari: Number(assignmentForm.jam_per_hari),
-          volume: assignmentForm.volume.trim() === '' ? undefined : Number(assignmentForm.volume),
-          satuan: assignmentForm.satuan || undefined,
+          work_type_id: Number(assignmentForm.work_type_id),
+          volume,
           mulai: assignmentForm.mulai || undefined,
           selesai: assignmentForm.selesai || undefined,
           assignment_id: editingAssignment?.id,
@@ -369,13 +357,11 @@ export const ActivitiesPage: React.FC = () => {
     showAssignmentModal,
     selectedActivity,
     editingAssignment,
-    jamKerjaPerHari,
     assignmentForm.user_id,
     assignmentForm.peran,
     assignmentForm.peranLainnya,
-    assignmentForm.jam_per_hari,
+    assignmentForm.work_type_id,
     assignmentForm.volume,
-    assignmentForm.satuan,
     assignmentForm.mulai,
     assignmentForm.selesai,
   ]);
@@ -394,11 +380,11 @@ export const ActivitiesPage: React.FC = () => {
 
     if (!userId) errors.push('Pegawai yang ditugaskan wajib dipilih.');
     if (!peran) errors.push('Peran penugasan wajib diisi.');
-    if (!isValidJamPerHari(assignmentForm.jam_per_hari, jamKerjaPerHari)) {
-      errors.push(`Jam per hari wajib diisi antara 0,25 dan ${jamKerjaPerHari} jam, kelipatan 0,25.`);
+    if (!assignmentForm.work_type_id) {
+      errors.push('Jenis pekerjaan wajib dipilih.');
     }
-    if (assignmentForm.volume.trim() !== '' && !(Number(assignmentForm.volume) > 0)) {
-      errors.push('Volume pekerjaan harus berupa angka lebih dari 0 atau dikosongkan.');
+    if (!(Number(assignmentForm.volume) > 0)) {
+      errors.push('Volume pekerjaan wajib berupa angka lebih dari 0.');
     }
 
     if (assignmentForm.mulai && assignmentForm.mulai < selectedActivity.mulai) {
@@ -434,9 +420,8 @@ export const ActivitiesPage: React.FC = () => {
         activity_id: selectedActivity.id,
         user_id: userId,
         peran,
-        jam_per_hari: Number(assignmentForm.jam_per_hari),
-        volume: assignmentForm.volume.trim() === '' ? undefined : Number(assignmentForm.volume),
-        satuan: assignmentForm.satuan || undefined,
+        work_type_id: Number(assignmentForm.work_type_id),
+        volume: Number(assignmentForm.volume),
         mulai: assignmentForm.mulai || undefined,
         selesai: assignmentForm.selesai || undefined,
       };
@@ -785,12 +770,18 @@ export const ActivitiesPage: React.FC = () => {
                           Peran: <strong className="text-slate-700">{as.peran}</strong>
                         </p>
                       ) : (
-                        <p className="text-slate-500">
-                          Peran: <strong className="text-slate-700">{as.peran}</strong> • Jam/hari: <strong>{as.jam_per_hari ?? 0} jam</strong>
-                          {as.volume !== null && as.volume !== undefined && as.satuan
-                            ? ` • Target: ${as.volume} ${as.satuan}`
-                            : ''}
-                        </p>
+                        <>
+                          <p className="text-slate-500">
+                            Peran: <strong className="text-slate-700">{as.peran}</strong>
+                            {as.work_type_nama ? ` • ${as.work_type_nama}` : ''}
+                          </p>
+                          {as.work_type_nama && (
+                            <p className="text-[11px] text-slate-500">
+                              Volume: {as.volume ?? '-'} {as.satuan ?? ''} • Norma: {as.norma_menit ?? '-'} menit • Total:{' '}
+                              {as.total_jam ?? '-'} jam
+                            </p>
+                          )}
+                        </>
                       )}
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                         {as.effective_mulai} s.d. {as.effective_selesai}
@@ -865,86 +856,94 @@ export const ActivitiesPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Peran Penugasan</label>
-                  <select
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Peran Penugasan</label>
+                <select
+                  required
+                  value={assignmentForm.peran}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, peran: e.target.value })}
+                  disabled={editingIsPj}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px] disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  {assignmentRoleOptions.map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+                {editingIsPj ? (
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Peran Penanggung Jawab tidak dapat diubah agar kegiatan tetap memiliki satu PJ.
+                  </p>
+                ) : assignmentForm.peran === 'Lainnya' ? (
+                  <input
+                    type="text"
                     required
-                    value={assignmentForm.peran}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, peran: e.target.value })}
-                    disabled={editingIsPj}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px] disabled:bg-slate-100 disabled:text-slate-500"
-                  >
-                    {assignmentRoleOptions.map((role) => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
-                  </select>
-                  {editingIsPj ? (
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      Peran Penanggung Jawab tidak dapat diubah agar kegiatan tetap memiliki satu PJ.
-                    </p>
-                  ) : assignmentForm.peran === 'Lainnya' ? (
-                    <input
-                      type="text"
-                      required
-                      placeholder="Isi peran..."
-                      value={assignmentForm.peranLainnya}
-                      onChange={(e) => setAssignmentForm({ ...assignmentForm, peranLainnya: e.target.value })}
-                      className="mt-1.5 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
-                    />
-                  ) : null}
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Satuan (Opsional)</label>
-                  <select
-                    value={assignmentForm.satuan}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, satuan: e.target.value })}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
-                  >
-                    <option value="">-</option>
-                    <option value="Dokumen">Dokumen</option>
-                    <option value="Blok Sensus">Blok Sensus</option>
-                    <option value="Responden">Responden</option>
-                    <option value="Hari">Hari</option>
-                    <option value="Laporan">Laporan</option>
-                    <option value="Lainnya">Lainnya</option>
-                  </select>
-                </div>
+                    placeholder="Isi peran..."
+                    value={assignmentForm.peranLainnya}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, peranLainnya: e.target.value })}
+                    className="mt-1.5 w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
+                  />
+                ) : null}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Jenis Pekerjaan <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={assignmentForm.work_type_id}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, work_type_id: e.target.value })}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
+                >
+                  <option value="">Pilih jenis pekerjaan</option>
+                  {workTypes.map((workType) => (
+                    <option key={workType.id} value={workType.id}>
+                      {workType.nama} ({workType.satuan}, {workType.norma_menit} menit)
+                    </option>
+                  ))}
+                </select>
+                {selectedWorkType && (
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                    <span
+                      className={`inline-block rounded-full border px-2 py-0.5 font-semibold ${
+                        selectedWorkType.jenis_norma === 'standar'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                    >
+                      {selectedWorkType.jenis_norma === 'standar' ? 'Standar' : 'Estimasi'}
+                    </span>
+                    <span>Norma {selectedWorkType.norma_menit} menit per {selectedWorkType.satuan}</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Jam per Hari <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step={JAM_STEP}
-                    min={JAM_STEP}
-                    max={jamKerjaPerHari}
-                    required
-                    value={assignmentForm.jam_per_hari}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, jam_per_hari: e.target.value })}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Volume Pekerjaan (Opsional)
+                    Volume <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
                     step="any"
                     min="0.01"
+                    required
                     value={assignmentForm.volume}
                     onChange={(e) => setAssignmentForm({ ...assignmentForm, volume: e.target.value })}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
-                    placeholder="Keterangan target"
+                    placeholder="Contoh: 40"
                   />
+                </div>
+                <div>
+                  <p className="block text-xs font-semibold text-slate-700 mb-1">Total Beban</p>
+                  <div className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px] bg-slate-50 font-semibold text-slate-700">
+                    {plannedTotalJam !== null ? `${plannedTotalJam} jam` : '—'}
+                  </div>
                 </div>
               </div>
               <p className="text-[10px] text-slate-500">
-                Jam per hari menentukan beban kerja; volume dan satuan hanya keterangan target. Maksimal {jamKerjaPerHari} jam/hari, kelipatan 0,25.
+                Beban kerja dihitung dari volume × norma waktu, lalu disebar rata ke hari kerja pada
+                periode penugasan.
               </p>
 
               <div className="grid grid-cols-2 gap-3">
@@ -989,7 +988,7 @@ export const ActivitiesPage: React.FC = () => {
                   )}
                 </div>
                 <p className="mt-1 text-[10px] text-slate-400">
-                  Dihitung dari WorkloadService berdasarkan jam per hari dikali hari kerja, prorata tanggal, dan penugasan lain. Tidak ada data yang disimpan.
+                  Dihitung dari WorkloadService berdasarkan volume × norma waktu, sebaran hari kerja, prorata tanggal, dan penugasan lain. Tidak ada data yang disimpan.
                 </p>
               </div>
 
@@ -1004,9 +1003,12 @@ export const ActivitiesPage: React.FC = () => {
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
                   <div className="flex flex-wrap justify-between gap-1 text-[11px] text-slate-600">
                     <span>
-                      Rencana: <strong>{previewResult.rencana.jam_per_hari} jam/hari</strong>
+                      Rencana: <strong>{previewResult.rencana.total_jam} jam</strong>
                       {previewResult.rencana.volume !== null && previewResult.rencana.satuan
-                        ? ` • Target ${previewResult.rencana.volume} ${previewResult.rencana.satuan}`
+                        ? ` • ${previewResult.rencana.volume} ${previewResult.rencana.satuan}`
+                        : ''}
+                      {previewResult.rencana.norma_menit !== null
+                        ? ` • norma ${previewResult.rencana.norma_menit} menit`
                         : ''}
                     </span>
                     <span>

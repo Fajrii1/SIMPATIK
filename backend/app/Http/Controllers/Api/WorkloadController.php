@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\User;
 use App\Services\WorkloadService;
+use App\Support\AssignmentVisibility;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -152,7 +153,7 @@ class WorkloadController extends Controller
             $assignment = $assignments->get($row['assignment_id']);
             $teamName = $assignment?->activity?->team?->nama;
             $metricsVisible = $assignment
-                ? \App\Support\AssignmentVisibility::canViewMetrics($viewer, $assignment)
+                ? AssignmentVisibility::canViewMetrics($viewer, $assignment)
                 : false;
 
             return [
@@ -163,6 +164,13 @@ class WorkloadController extends Controller
                 'peran' => $row['peran'],
                 'mulai' => $row['mulai'],
                 'selesai' => $row['selesai'],
+                'work_type_id' => $row['work_type_id'] ?? null,
+                'work_type_nama' => $metricsVisible ? ($row['work_type_nama'] ?? null) : null,
+                'volume' => $metricsVisible ? ($row['volume'] ?? null) : null,
+                'satuan' => $metricsVisible ? ($row['satuan'] ?? null) : null,
+                'norma_menit' => $metricsVisible ? ($row['norma_menit'] ?? null) : null,
+                'total_menit' => $metricsVisible ? ($row['total_menit'] ?? null) : null,
+                'total_jam' => $metricsVisible ? ($row['total_jam'] ?? null) : null,
                 'jam_per_hari' => $metricsVisible ? $row['jam_per_hari'] : null,
                 'hari_kerja' => $row['hari_kerja'],
                 'jam_terpakai' => $metricsVisible ? $row['jam_terpakai'] : null,

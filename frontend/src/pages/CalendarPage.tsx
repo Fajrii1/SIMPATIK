@@ -56,6 +56,7 @@ export const CalendarPage: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
   const [monthlyThreshold, setMonthlyThreshold] = useState(100);
+  const [jamKerjaPerHari, setJamKerjaPerHari] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -98,8 +99,12 @@ export const CalendarPage: React.FC = () => {
         const settingResponse = await api.get('/settings');
         const threshold = Number(settingResponse.data?.settings?.ambang_beban_bulanan);
         setMonthlyThreshold(Number.isFinite(threshold) && threshold > 0 ? threshold : 100);
+
+        const jamKerja = Number(settingResponse.data?.settings?.jam_kerja_per_hari);
+        setJamKerjaPerHari(Number.isFinite(jamKerja) && jamKerja > 0 ? jamKerja : 7);
       } catch {
         setMonthlyThreshold(100);
+        setJamKerjaPerHari(7);
       }
     } catch (requestError: unknown) {
       const maybeError = requestError as { response?: { data?: { message?: string } }; message?: string };
@@ -157,8 +162,8 @@ export const CalendarPage: React.FC = () => {
     [filteredEvents, activeTeams, year]
   );
   const employees = useMemo(
-    () => buildEmployeeSummary(filteredEvents, filterUsers, year, monthlyThreshold),
-    [filteredEvents, filterUsers, year, monthlyThreshold]
+    () => buildEmployeeSummary(filteredEvents, filterUsers, year, monthlyThreshold, jamKerjaPerHari),
+    [filteredEvents, filterUsers, year, monthlyThreshold, jamKerjaPerHari]
   );
   const eventsById = useMemo(
     () => new Map(filteredEvents.map((event) => [event.id, event])),

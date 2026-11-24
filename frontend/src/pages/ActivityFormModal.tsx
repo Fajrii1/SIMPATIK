@@ -13,6 +13,7 @@ import type {
   Activity,
   Team,
   User,
+  WorkType,
   PreviewBatchResponse,
   PreviewBatchPegawaiResult,
 } from '../types';
@@ -31,17 +32,14 @@ interface AssignmentRow {
   user_id: number;
   peran: string;
   peranLainnya: string;
-  jam_per_hari: string;
+  work_type_id: string;
   volume: string;
-  satuan: string;
   mulai: string;
   selesai: string;
 }
 
 const ROLE_OPTIONS = ['Anggota', 'Pengolah Data', 'Pengawas', 'Lainnya'] as const;
-const SATUAN_OPTIONS = ['Dokumen', 'Blok Sensus', 'Responden', 'Hari', 'Laporan', 'Lainnya'] as const;
 const DEFAULT_JAM_KERJA_PER_HARI = 7;
-const JAM_STEP = 0.25;
 const PJ_ROLE = 'Penanggung Jawab';
 const JENIS_OPTIONS = [
   'Survei',
@@ -82,9 +80,8 @@ const buatBaris = (userId: number): AssignmentRow => ({
   user_id: userId,
   peran: 'Anggota',
   peranLainnya: '',
-  jam_per_hari: '1',
+  work_type_id: '',
   volume: '',
-  satuan: '',
   mulai: '',
   selesai: '',
 });
@@ -118,6 +115,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [previewError, setPreviewError] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [jamKerjaPerHari, setJamKerjaPerHari] = useState(DEFAULT_JAM_KERJA_PER_HARI);
+  const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
 
   const selectableTeams = useMemo(() => {
     if (isAdmin) return teams;
@@ -137,6 +135,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
         }
       } catch {
         setJamKerjaPerHari(DEFAULT_JAM_KERJA_PER_HARI);
+      }
+
+      try {
+        const workTypeRes = await api.get('/work-types/options');
+        setWorkTypes(workTypeRes.data?.data ?? []);
+      } catch {
+        setWorkTypes([]);
       }
 
       try {
@@ -258,6 +263,23 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   };
 
+  const workTypeById = useMemo(
+    () => new Map(workTypes.map((workType) => [workType.id, workType])),
+    [workTypes]
+  );
+
+  const selectedWorkType = (row: AssignmentRow): WorkType | undefined =>
+    workTypeById.get(Number(row.work_type_id));
+
+  const totalJamForRow = (row: AssignmentRow): number | null => {
+    const workType = selectedWorkType(row);
+    const volume = Number(row.volume);
+
+    if (!workType || !Number.isFinite(volume) || volume <= 0) return null;
+
+    return Math.round(((volume * workType.norma_menit) / 60) * 100) / 100;
+  };
+
   const applyFirstRowToAll = () => {
     setRows((current) => {
       if (current.length < 2) return current;
@@ -266,25 +288,21 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       return current.map((row, index) =>
         index === 0
           ? row
-          : { ...row, jam_per_hari: source.jam_per_hari, volume: source.volume, satuan: source.satuan }
+          : { ...row, work_type_id: source.work_type_id, volume: source.volume }
       );
     });
   };
 
-  const validJamPerHari = (value: string): boolean => {
-    const num = Number(value);
-    if (!Number.isFinite(num) || num < JAM_STEP || num > jamKerjaPerHari) {
-      return false;
-    }
-    const steps = num / JAM_STEP;
-    return Math.abs(steps - Math.round(steps)) < 0.00001;
+  const rowIsValid = (row: AssignmentRow): boolean => {
+    const volume = Number(row.volume);
+    return Boolean(row.work_type_id) && Number.isFinite(volume) && volume > 0;
   };
 
   const basicValidForPreview =
     Boolean(formData.team_id) &&
     Boolean(formData.mulai) &&
     rows.length > 0 &&
-    rows.every((row) => validJamPerHari(row.jam_per_hari));
+    rows.every((row) => rowIsValid(row));
 
   // Baris PJ ditampilkan sebagai "Penanggung Jawab" tanpa mengubah peran default baris.
   // Peran efektif inilah yang harus dikirim ke backend, bukan row.peran mentah.
@@ -302,9 +320,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     assignments: rows.map((row) => ({
       user_id: row.user_id,
       peran: effectivePeran(row),
-      jam_per_hari: Number(row.jam_per_hari),
-      volume: row.volume.trim() === '' ? undefined : Number(row.volume),
-      satuan: row.satuan || undefined,
+      work_type_id: Number(row.work_type_id),
+      volume: Number(row.volume),
       mulai: row.mulai || undefined,
       selesai: row.selesai || undefined,
     })),
@@ -402,14 +419,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     rows.forEach((row) => {
       const label = candidates.find((c) => c.id === row.user_id)?.nama ?? `Pegawai #${row.user_id}`;
 
-      if (!validJamPerHari(row.jam_per_hari)) {
-        errors.push(
-          `Jam per hari untuk ${label} wajib diisi antara 0,25 dan ${jamKerjaPerHari} jam, kelipatan 0,25.`
-        );
+      if (!row.work_type_id) {
+        errors.push(`Jenis pekerjaan untuk ${label} wajib dipilih.`);
       }
 
-      if (row.volume.trim() !== '' && !(Number(row.volume) > 0)) {
-        errors.push(`Volume untuk ${label} harus berupa angka lebih dari 0 atau dikosongkan.`);
+      if (!(Number(row.volume) > 0)) {
+        errors.push(`Volume untuk ${label} wajib berupa angka lebih dari 0.`);
       }
 
       if (row.peran === 'Lainnya' && !row.peranLainnya.trim()) {
@@ -463,9 +478,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
         const assignments = rows.map((row) => ({
           user_id: row.user_id,
           peran: effectivePeran(row),
-          jam_per_hari: Number(row.jam_per_hari),
-          ...(row.volume.trim() !== '' ? { volume: Number(row.volume) } : {}),
-          ...(row.satuan ? { satuan: row.satuan } : {}),
+          work_type_id: Number(row.work_type_id),
+          volume: Number(row.volume),
           ...(row.mulai ? { mulai: row.mulai } : {}),
           ...(row.selesai ? { selesai: row.selesai } : {}),
         }));
@@ -610,7 +624,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   {jamKerjaPerHari} jam/hari
                 </div>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Beban kerja dihitung dari jam per hari dikali jumlah hari kerja pada periode penugasan.
+                  Beban kerja dihitung dari volume × norma waktu jenis pekerjaan, lalu disebar rata
+                  ke hari kerja pada periode penugasan.
                 </p>
               </div>
 
@@ -740,7 +755,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   <div>
                     <h3 className="text-xs font-bold text-slate-800">Detail Penugasan per Pegawai</h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Jam/hari wajib; volume dan satuan hanya keterangan target (opsional).
+                      Pilih jenis pekerjaan dan isi volume; total jam dihitung otomatis.
                     </p>
                   </div>
                   <button
@@ -750,7 +765,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 min-h-[36px]"
                   >
                     <Copy className="w-3.5 h-3.5" />
-                    Terapkan jam, volume, dan satuan ke semua
+                    Terapkan jenis &amp; volume ke semua
                   </button>
                 </div>
 
@@ -775,9 +790,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                         <tr>
                           <th className="py-2 px-2">Pegawai</th>
                           <th className="py-2 px-2">Peran</th>
-                          <th className="py-2 px-2 w-24">Jam/Hari *</th>
-                          <th className="py-2 px-2 w-24">Volume</th>
-                          <th className="py-2 px-2">Satuan</th>
+                          <th className="py-2 px-2 min-w-[190px]">Jenis Pekerjaan *</th>
+                          <th className="py-2 px-2 w-24">Volume *</th>
+                          <th className="py-2 px-2 w-24">Total</th>
                           <th className="py-2 px-2">Indikator</th>
                           {showPeriodAdvanced && <th className="py-2 px-2">Periode</th>}
                         </tr>
@@ -830,16 +845,32 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                                 )}
                               </td>
                               <td className="py-2 px-2">
-                                <input
-                                  type="number"
-                                  min={JAM_STEP}
-                                  max={jamKerjaPerHari}
-                                  step={JAM_STEP}
-                                  aria-label={`Jam per hari ${candidate?.nama}`}
-                                  value={row.jam_per_hari}
-                                  onChange={(e) => updateRow(row.key, { jam_per_hari: e.target.value })}
-                                  className="w-20 text-[11px] border border-slate-200 rounded px-2 py-1.5"
-                                />
+                                <div className="space-y-1">
+                                  <select
+                                    aria-label={`Jenis pekerjaan ${candidate?.nama}`}
+                                    value={row.work_type_id}
+                                    onChange={(e) => updateRow(row.key, { work_type_id: e.target.value })}
+                                    className="w-full text-[11px] border border-slate-200 rounded px-2 py-1.5"
+                                  >
+                                    <option value="">Pilih jenis</option>
+                                    {workTypes.map((workType) => (
+                                      <option key={workType.id} value={workType.id}>
+                                        {workType.nama} ({workType.satuan}, {workType.norma_menit} mnt)
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {selectedWorkType(row) && (
+                                    <span
+                                      className={`inline-block rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${
+                                        selectedWorkType(row)?.jenis_norma === 'standar'
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                                      }`}
+                                    >
+                                      {selectedWorkType(row)?.jenis_norma === 'standar' ? 'Standar' : 'Estimasi'}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-2 px-2">
                                 <input
@@ -850,23 +881,17 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                                   value={row.volume}
                                   onChange={(e) => updateRow(row.key, { volume: e.target.value })}
                                   className="w-20 text-[11px] border border-slate-200 rounded px-2 py-1.5"
-                                  placeholder="opsional"
+                                  placeholder="0"
                                 />
                               </td>
                               <td className="py-2 px-2">
-                                <select
-                                  aria-label={`Satuan ${candidate?.nama}`}
-                                  value={row.satuan}
-                                  onChange={(e) => updateRow(row.key, { satuan: e.target.value })}
-                                  className="text-[11px] border border-slate-200 rounded px-2 py-1.5"
-                                >
-                                  <option value="">-</option>
-                                  {SATUAN_OPTIONS.map((satuan) => (
-                                    <option key={satuan} value={satuan}>
-                                      {satuan}
-                                    </option>
-                                  ))}
-                                </select>
+                                {totalJamForRow(row) !== null ? (
+                                  <span className="font-semibold text-slate-700">
+                                    {totalJamForRow(row)} jam
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">–</span>
+                                )}
                               </td>
                               <td className="py-2 px-2">
                                 {indicator ? (
@@ -929,7 +954,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
                     <Info className="mt-0.5 w-3.5 h-3.5 shrink-0 text-slate-400" />
                     <span>
-                      Lengkapi tim, tanggal mulai, dan jam per hari; pratinjau dihitung otomatis sebelum menyimpan.
+                      Lengkapi tim, tanggal mulai, jenis pekerjaan, dan volume; pratinjau dihitung otomatis sebelum menyimpan.
                     </span>
                   </div>
                 )}

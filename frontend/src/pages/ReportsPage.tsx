@@ -65,7 +65,7 @@ export const ReportsPage: React.FC = () => {
             </div>
             <h2 className="text-base font-bold text-slate-900">Rekapitulasi Beban Kerja Pegawai</h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Memuat daftar nama, NIP, tim, total poin bulan bersangkutan, persentase ambang batas, dan status beban kerja.
+              Memuat daftar nama, NIP, tim, total jam bulan bersangkutan, persentase kapasitas, dan status beban kerja.
             </p>
 
             <div className="space-y-3 mt-4">
@@ -125,7 +125,7 @@ export const ReportsPage: React.FC = () => {
             </div>
             <h2 className="text-base font-bold text-slate-900">Rekapitulasi Kegiatan Statistik</h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Daftar kegiatan tahunan, tim penanggung jawab, jadwal pelaksanaan, bobot, jumlah petugas, dan status penyelesaian.
+              Daftar kegiatan tahunan, tim penanggung jawab, jadwal pelaksanaan, jumlah petugas, dan status penyelesaian.
             </p>
 
             <div className="space-y-3 mt-4">
@@ -185,9 +185,9 @@ export const ReportsPage: React.FC = () => {
             <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
-            <h2 className="text-base font-bold text-slate-900">Ekspor Kendala Mingguan</h2>
+            <h2 className="text-base font-bold text-slate-900">Ekspor Kendala Bulanan</h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Daftar kendala beserta minggu mulai, tim, kegiatan terkait, PIC, status, dan catatan penutupan. Filter dapat dibatasi rentang minggu, tim, atau status.
+              Daftar kendala beserta bulan terkait, tim, kegiatan terkait, PIC, status, dan catatan penutupan. Filter dapat dibatasi rentang tanggal, tim, atau status.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">

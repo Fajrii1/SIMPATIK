@@ -16,6 +16,9 @@ class Assignment extends Model
         'activity_id',
         'user_id',
         'peran',
+        'work_type_id',
+        'norma_menit',
+        'total_menit',
         'jam_per_hari',
         'volume',
         'satuan',
@@ -28,6 +31,8 @@ class Assignment extends Model
         return [
             'jam_per_hari' => 'decimal:2',
             'volume' => 'decimal:2',
+            'norma_menit' => 'integer',
+            'total_menit' => 'integer',
             'mulai' => 'date',
             'selesai' => 'date',
         ];
@@ -39,6 +44,14 @@ class Assignment extends Model
     public function activity(): BelongsTo
     {
         return $this->belongsTo(Activity::class);
+    }
+
+    /**
+     * Jenis pekerjaan (norma waktu) yang dipakai saat penugasan dibuat.
+     */
+    public function workType(): BelongsTo
+    {
+        return $this->belongsTo(WorkType::class);
     }
 
     /**

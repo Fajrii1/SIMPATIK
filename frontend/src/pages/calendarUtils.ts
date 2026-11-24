@@ -404,13 +404,36 @@ export function buildEmployeeConflicts(events: CalendarEvent[], year: number): E
   );
 }
 
-/** Distribusi poin bulanan penugasan, konsisten dengan WorkloadService backend. */
-function splitPointsByMonth(
-  totalPoints: number,
+/** Jumlah hari kerja (Senin-Jumat) dalam rentang inklusif. */
+function countWeekdays(startIso: string, endIso: string): number {
+  let count = 0;
+  const cursor = parseIsoDate(startIso);
+  const end = parseIsoDate(endIso);
+
+  while (cursor <= end) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return count;
+}
+
+/** Kapasitas jam kerja satu bulan berdasarkan jumlah hari kerja di bulan tersebut. */
+function monthCapacityHours(monthKey: string, jamKerjaPerHari: number): number {
+  const [year, month] = monthKey.split('-').map(Number);
+  const start = buildIsoDate(year, month - 1, 1);
+  const end = buildIsoDate(year, month - 1, getMonthLength(year, month - 1));
+  return countWeekdays(start, end) * jamKerjaPerHari;
+}
+
+/** Distribusi jam beban bulanan penugasan secara proporsional terhadap hari kerja. */
+function splitHoursByMonth(
+  totalHours: number,
   startIso: string,
   endIso: string
 ): Record<string, number> {
-  const totalDays = eachDateInclusive(startIso, endIso).length;
+  const totalDays = countWeekdays(startIso, endIso);
   if (totalDays <= 0) return {};
 
   const result: Record<string, number> = {};
@@ -425,9 +448,9 @@ function splitPointsByMonth(
     const overlapEnd = monthEnd < end ? monthEnd : end;
 
     if (overlapStart <= overlapEnd) {
-      const days = Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000) + 1;
+      const workdays = countWeekdays(toIsoDate(overlapStart), toIsoDate(overlapEnd));
       const key = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}`;
-      result[key] = Math.round(totalPoints * (days / totalDays) * 100) / 100;
+      result[key] = Math.round(totalHours * (workdays / totalDays) * 100) / 100;
     }
 
     cursor.setMonth(cursor.getMonth() + 1);
@@ -602,7 +625,8 @@ export function buildEmployeeSummary(
   events: CalendarEvent[],
   users: User[],
   year: number,
-  monthlyThreshold = 100
+  monthlyThreshold = 100,
+  jamKerjaPerHari = 7
 ): EmployeeSummary[] {
   const userMap = new Map(users.map((user) => [user.id, user]));
   const summaries = new Map<
@@ -619,7 +643,7 @@ export function buildEmployeeSummary(
       periodStart?: string;
       periodEnd?: string;
       dailyCounts: Map<string, number>;
-      monthlyPoints: Record<string, number>;
+      monthlyHours: Record<string, number>;
       metricsHidden: boolean;
     }
   >();
@@ -637,7 +661,7 @@ export function buildEmployeeSummary(
       days: new Set<string>(),
       assignmentDays: 0,
       dailyCounts: new Map<string, number>(),
-      monthlyPoints: {},
+      monthlyHours: {},
       metricsHidden: false,
     };
 
@@ -668,17 +692,16 @@ export function buildEmployeeSummary(
       existing.picEventIds.add(event.id);
     }
 
-    const volume = assignment.volume ?? 1;
-    const totalPoints = Math.round(volume * event.extendedProps.bobot * 100) / 100;
-    const distribution = splitPointsByMonth(
-      totalPoints,
-      assignment.mulai || event.start,
-      assignment.selesai || getEventInclusiveEnd(event)
-    );
+    const periodStart = assignment.mulai || event.start;
+    const periodEnd = assignment.selesai || getEventInclusiveEnd(event);
+    const totalHours = assignment.total_jam !== null && assignment.total_jam !== undefined
+      ? assignment.total_jam
+      : (Number(assignment.jam_per_hari) || 0) * countWeekdays(periodStart, periodEnd);
+    const distribution = splitHoursByMonth(totalHours, periodStart, periodEnd);
 
-    Object.entries(distribution).forEach(([monthKey, points]) => {
+    Object.entries(distribution).forEach(([monthKey, jam]) => {
       if (!monthKey.startsWith(`${year}-`)) return;
-      existing.monthlyPoints[monthKey] = Math.round(((existing.monthlyPoints[monthKey] || 0) + points) * 100) / 100;
+      existing.monthlyHours[monthKey] = Math.round(((existing.monthlyHours[monthKey] || 0) + jam) * 100) / 100;
     });
 
     summaries.set(assignment.user_id, existing);
@@ -686,14 +709,16 @@ export function buildEmployeeSummary(
 
   return Array.from(summaries.values())
     .map((summary) => {
-      const peakEntry = Object.entries(summary.monthlyPoints).sort(([, a], [, b]) => b - a)[0];
-      const points = peakEntry ? peakEntry[1] : 0;
-      const persentase = monthlyThreshold > 0 ? (points / monthlyThreshold) * 100 : 0;
+      const peakEntry = Object.entries(summary.monthlyHours).sort(([, a], [, b]) => b - a)[0];
+      const jamTerpakai = peakEntry ? peakEntry[1] : 0;
+      const capacity = peakEntry ? monthCapacityHours(peakEntry[0], jamKerjaPerHari) : 0;
+      const thresholdHours = capacity * (monthlyThreshold > 0 ? monthlyThreshold / 100 : 1);
+      const persentase = thresholdHours > 0 ? (jamTerpakai / thresholdHours) * 100 : 0;
       const peakMonth = peakEntry
         ? {
             key: peakEntry[0],
             label: `${MONTHS[Number(peakEntry[0].slice(5, 7)) - 1]} ${peakEntry[0].slice(0, 4)}`,
-            points: peakEntry[1],
+            jam: peakEntry[1],
           }
         : undefined;
 
@@ -711,7 +736,7 @@ export function buildEmployeeSummary(
         periodStart: summary.periodStart,
         periodEnd: summary.periodEnd,
         maxConcurrent: Math.max(0, ...Array.from(summary.dailyCounts.values())),
-        points,
+        jam_terpakai: jamTerpakai,
         peakMonth,
         indicator: determineWorkloadIndicator(persentase),
         metricsHidden: summary.metricsHidden,

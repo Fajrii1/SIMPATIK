@@ -122,7 +122,7 @@ class DashboardController extends Controller
         }
 
         // 3. AGENDA / PENUGASAN AKTIF PENGGUNA
-        $myAssignments = Assignment::with(['activity.team'])
+        $myAssignments = Assignment::with(['activity.team', 'workType'])
             ->where('user_id', $user->id)
             ->where(function ($q) use ($today) {
                 $q->where('selesai', '>=', $today)
@@ -141,9 +141,16 @@ class DashboardController extends Controller
                 'kegiatan' => $as->activity?->nama,
                 'tim' => $as->activity?->team?->nama,
                 'peran' => $as->peran,
+                'work_type_id' => $as->work_type_id,
+                'work_type_nama' => $as->workType?->nama,
+                'volume' => $as->volume !== null ? (float) $as->volume : null,
+                'satuan' => $as->satuan,
+                'norma_menit' => $as->norma_menit,
+                'total_menit' => $as->total_menit,
+                'total_jam' => $as->total_menit !== null ? round($as->total_menit / 60, 2) : null,
                 'mulai' => $as->getEffectiveMulai()?->toDateString(),
                 'selesai' => $as->getEffectiveSelesai()?->toDateString(),
-                'jam_per_hari' => (float) $as->jam_per_hari,
+                'jam_per_hari' => round($this->workloadService->getAssignmentDailyHours($as), 2),
                 'status_kegiatan' => $as->activity?->status,
             ];
         });

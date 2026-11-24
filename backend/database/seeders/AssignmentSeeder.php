@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Activity;
 use App\Models\Assignment;
 use App\Models\User;
+use App\Models\WorkType;
 use Illuminate\Database\Seeder;
 
 class AssignmentSeeder extends Seeder
@@ -343,9 +344,30 @@ class AssignmentSeeder extends Seeder
             ],
         ];
 
+        $workTypeMap = [
+            'Dokumen' => 'Pemeriksaan dokumen',
+            'Laporan' => 'Penyusunan laporan',
+            'Dataset' => 'Pengolahan data',
+            'Data' => 'Verifikasi data',
+            'Hari' => 'Pengolahan data',
+        ];
+
+        $workTypes = [];
+
         foreach ($assignments as $asn) {
-            // Beban kerja dihitung dari jam per hari, bukan volume.
+            // Kolom jam per hari dipertahankan untuk kompatibilitas data lama,
+            // tetapi beban ABK dihitung dari volume x norma waktu.
             $asn['jam_per_hari'] = $asn['jam_per_hari'] ?? 2.00;
+
+            $namaJenis = $workTypeMap[$asn['satuan'] ?? ''] ?? 'Verifikasi data';
+            $workTypes[$namaJenis] ??= WorkType::where('nama', $namaJenis)->first();
+
+            if ($workTypes[$namaJenis]) {
+                $asn['work_type_id'] = $workTypes[$namaJenis]->id;
+                $asn['norma_menit'] = $workTypes[$namaJenis]->norma_menit;
+                $asn['total_menit'] = (int) round((float) $asn['volume'] * $workTypes[$namaJenis]->norma_menit);
+                $asn['satuan'] = $workTypes[$namaJenis]->satuan;
+            }
 
             Assignment::updateOrCreate(
                 [

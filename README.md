@@ -1,6 +1,6 @@
 # SIMPATIK — Sistem Penjadwalan dan Monitoring Kegiatan Statistik BPS Kota Palembang
 
-Aplikasi web untuk menyusun jadwal kegiatan statistik lintas tim, menugaskan pegawai, menghitung beban kerja otomatis, memantau status kegiatan, serta mencatat kendala dan tindak lanjut mingguan. Dikembangkan sebagai output penelitian dengan data dummy.
+Aplikasi web untuk menyusun jadwal kegiatan statistik lintas tim, menugaskan pegawai, menghitung beban kerja otomatis dengan metode Analisis Beban Kerja (ABK), memantau status kegiatan, serta mencatat kendala dan tindak lanjut. Dikembangkan sebagai output penelitian dengan data dummy.
 
 ## Teknologi
 
@@ -75,6 +75,7 @@ Di luar production, akun baru dibuat dengan kata sandi pengembangan `password` d
 | Fitur | Admin | Pimpinan | Ketua Tim (timnya) | Pegawai |
 |---|---|---|---|---|
 | Kelola pengguna, tim, anggota, ketua tim | Ya | Tidak | Tidak | Tidak |
+| Kelola norma waktu / jenis pekerjaan (ABK) | Ya | Tidak | Tidak | Tidak |
 | Tambah/edit kegiatan | Semua tim | Tidak | Tim yang dipimpin | Tidak |
 | Lihat kalender | Semua tim | Semua tim | Semua tim | Semua tim (lihat) |
 | Lihat beban kerja | Semua pegawai | Semua pegawai | Anggota timnya | Hanya miliknya |
@@ -85,15 +86,20 @@ Hak akses dicek di backend; frontend hanya menyesuaikan tampilan. Rujukan utama 
 
 Catatan: "Ketua Tim" bukan peran tersendiri, melainkan pegawai atau pimpinan yang tercatat sebagai `teams.ketua_id`.
 
-## Rumus Beban Kerja
+## Rumus Beban Kerja (ABK)
 
-Rumus dasar (PRD):
+Beban kerja dihitung dengan metode Analisis Beban Kerja (ABK):
 
 ```
-Total Points = Volume × Weight
+Total menit = round(volume × norma_menit)
+Total jam   = Total menit / 60
 ```
 
-Implementasi hanya ada di `backend/app/Services/WorkloadService.php`. Perhitungan memperhatikan distribusi per hari penugasan (periode efektif penugasan), kegiatan lintas bulan/tahun, dan aturan kegiatan besar. Frontend hanya menampilkan hasil API.
+`volume` adalah jumlah satuan pekerjaan yang ditugaskan, dan `norma_menit` adalah waktu baku per satuan (menit) dari master **Jenis Pekerjaan** (menu **Norma Waktu**, dikelola admin). Total jam disebar rata ke hari kerja pada periode penugasan; kapasitas bulan = hari kerja × 7 jam. Nilai norma disalin sebagai snapshot saat penugasan dibuat, sehingga perubahan norma tidak mengubah penugasan lama.
+
+Catatan: norma waktu bawaan masih **estimasi** dan belum divalidasi BPS; hanya untuk demonstrasi.
+
+Implementasi hanya ada di `backend/app/Services/WorkloadService.php`. Angka di Monitoring, Dashboard, Laporan, dan Kalender berasal dari service yang sama. Rincian rumus, distribusi, indikator, dan prosedur migrasi ada di `docs/METODE_ABK.md`.
 
 ## Struktur Folder
 
@@ -114,6 +120,7 @@ frontend/
 ## Dokumentasi Lain
 
 - `PRD.md` — kebutuhan produk dan aturan implementasi.
+- `docs/METODE_ABK.md` — metode Analisis Beban Kerja, rumus, distribusi, dan prosedur migrasi.
 - `docs/PANDUAN_INSTALASI_DAN_PENGGUNAAN.md` — panduan instalasi detail.
 - `docs/` (jika ada) — catatan keputusan dan laporan fase.
 
@@ -179,7 +186,7 @@ npm run lint
 npm run build
 ```
 
-Verifikasi browser: buka `http://localhost:5173`, login, uji kalender (heatmap/timeline/bulanan/ringkasan/rekap), tambah/detail kegiatan, filter, dashboard, laporan, dan kendala mingguan.
+Verifikasi browser: buka `http://localhost:5173`, login, uji kalender (heatmap/timeline/bulanan/ringkasan/rekap), tambah/detail kegiatan, norma waktu, filter, dashboard, laporan, dan kendala.
 
 ## Catatan Pengembangan
 
