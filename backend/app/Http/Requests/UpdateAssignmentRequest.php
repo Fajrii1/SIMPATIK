@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\SatuanPenugasan;
 use App\Models\Assignment;
 use App\Models\Setting;
 use App\Models\User;
@@ -12,7 +11,6 @@ use App\Support\PeranPenugasan;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class UpdateAssignmentRequest extends FormRequest
@@ -48,7 +46,7 @@ class UpdateAssignmentRequest extends FormRequest
             'work_type_id' => ['sometimes', 'nullable', 'integer', 'exists:work_types,id'],
             'jam_per_hari' => ['sometimes', 'nullable', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7)],
             'volume' => ['sometimes', 'required', 'numeric', 'min:0.01'],
-            'satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
+            'satuan' => ['nullable', 'string', 'max:30'],
             'mulai' => ['nullable', 'date'],
             'selesai' => ['nullable', 'date'],
         ];
@@ -185,7 +183,6 @@ class UpdateAssignmentRequest extends FormRequest
             'volume.required' => 'Volume pekerjaan wajib diisi.',
             'volume.numeric' => 'Volume penugasan harus berupa angka.',
             'volume.min' => 'Volume penugasan minimal 0.01.',
-            'satuan.in' => 'Satuan penugasan tidak valid.',
         ];
     }
 }

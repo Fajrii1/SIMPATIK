@@ -20,7 +20,7 @@ class StoreWorkTypeRequest extends FormRequest
         return [
             'nama' => ['required', 'string', 'max:120', 'unique:work_types,nama'],
             'satuan' => ['required', 'string', 'max:30'],
-            'norma_menit' => ['required', 'integer', 'min:1', 'max:100000'],
+            'norma_menit' => ['required', 'integer', 'min:1', 'max:65535'],
             'jenis_norma' => ['required', 'string', 'in:estimasi,standar'],
             'sumber' => ['nullable', 'string', 'max:255'],
             'aktif' => ['nullable', 'boolean'],
@@ -39,6 +39,7 @@ class StoreWorkTypeRequest extends FormRequest
             'norma_menit.required' => 'Norma waktu wajib diisi.',
             'norma_menit.integer' => 'Norma waktu harus berupa bilangan bulat (menit).',
             'norma_menit.min' => 'Norma waktu minimal 1 menit.',
+            'norma_menit.max' => 'Norma waktu maksimal 65.535 menit sesuai kapasitas penyimpanan.',
             'jenis_norma.required' => 'Jenis norma wajib dipilih.',
             'jenis_norma.in' => 'Jenis norma harus estimasi atau standar.',
         ];

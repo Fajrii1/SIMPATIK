@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
+use App\Services\WorkloadService;
 use App\Support\AssignmentVisibility;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -12,6 +13,10 @@ use Illuminate\Validation\Rule;
 
 class CalendarController extends Controller
 {
+    public function __construct(
+        protected WorkloadService $workloadService
+    ) {}
+
     /**
      * Mengambil daftar kegiatan untuk tampilan kalender lintas tim (PRD Bagian 12.2 S3 & Bagian 14).
      *
@@ -156,6 +161,9 @@ class CalendarController extends Controller
                 'start' => $start->format('Y-m-d'),
                 'end' => $end->format('Y-m-d'),
                 'total_events' => $events->count(),
+                // Sumber kalender kerja yang sama dengan perhitungan beban di backend.
+                'hari_libur' => $this->workloadService->getHolidayDates(),
+                'jam_kerja_per_hari' => $this->workloadService->getDailyWorkHours(),
             ],
         ]);
     }

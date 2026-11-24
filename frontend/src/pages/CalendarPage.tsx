@@ -57,6 +57,7 @@ export const CalendarPage: React.FC = () => {
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
   const [monthlyThreshold, setMonthlyThreshold] = useState(100);
   const [jamKerjaPerHari, setJamKerjaPerHari] = useState(7);
+  const [hariLibur, setHariLibur] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -84,6 +85,19 @@ export const CalendarPage: React.FC = () => {
       setEvents((calendarResponse.data?.events || []) as CalendarEvent[]);
       setTeams((teamResponse.data?.data || []) as Team[]);
 
+      const calendarMeta = calendarResponse.data?.meta || {};
+      const metaHolidays = Array.isArray(calendarMeta.hari_libur)
+        ? (calendarMeta.hari_libur as string[])
+        : [];
+      setHariLibur(metaHolidays);
+
+      const metaJamKerja = Number(calendarMeta.jam_kerja_per_hari);
+      const hasMetaJamKerja = Number.isFinite(metaJamKerja) && metaJamKerja > 0;
+
+      if (hasMetaJamKerja) {
+        setJamKerjaPerHari(metaJamKerja);
+      }
+
       if (peran === 'admin') {
         try {
           const userResponse = await api.get('/users', { params: { per_page: 100, aktif: true } });
@@ -101,10 +115,14 @@ export const CalendarPage: React.FC = () => {
         setMonthlyThreshold(Number.isFinite(threshold) && threshold > 0 ? threshold : 100);
 
         const jamKerja = Number(settingResponse.data?.settings?.jam_kerja_per_hari);
-        setJamKerjaPerHari(Number.isFinite(jamKerja) && jamKerja > 0 ? jamKerja : 7);
+        if (!hasMetaJamKerja) {
+          setJamKerjaPerHari(Number.isFinite(jamKerja) && jamKerja > 0 ? jamKerja : 7);
+        }
       } catch {
         setMonthlyThreshold(100);
-        setJamKerjaPerHari(7);
+        if (!hasMetaJamKerja) {
+          setJamKerjaPerHari(7);
+        }
       }
     } catch (requestError: unknown) {
       const maybeError = requestError as { response?: { data?: { message?: string } }; message?: string };
@@ -162,8 +180,16 @@ export const CalendarPage: React.FC = () => {
     [filteredEvents, activeTeams, year]
   );
   const employees = useMemo(
-    () => buildEmployeeSummary(filteredEvents, filterUsers, year, monthlyThreshold, jamKerjaPerHari),
-    [filteredEvents, filterUsers, year, monthlyThreshold, jamKerjaPerHari]
+    () =>
+      buildEmployeeSummary(
+        filteredEvents,
+        filterUsers,
+        year,
+        monthlyThreshold,
+        jamKerjaPerHari,
+        hariLibur
+      ),
+    [filteredEvents, filterUsers, year, monthlyThreshold, jamKerjaPerHari, hariLibur]
   );
   const eventsById = useMemo(
     () => new Map(filteredEvents.map((event) => [event.id, event])),

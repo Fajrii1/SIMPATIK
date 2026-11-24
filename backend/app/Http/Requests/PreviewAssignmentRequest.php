@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\SatuanPenugasan;
 use App\Models\Activity;
 use App\Models\Setting;
 use App\Models\User;
@@ -10,7 +9,6 @@ use App\Services\WorkloadService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class PreviewAssignmentRequest extends FormRequest
@@ -46,7 +44,8 @@ class PreviewAssignmentRequest extends FormRequest
             'work_type_id' => ['nullable', 'integer', 'exists:work_types,id', 'required_without:jam_per_hari'],
             'jam_per_hari' => ['nullable', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7), 'required_without:work_type_id'],
             'volume' => ['required', 'numeric', 'min:0.01'],
-            'satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
+            // Satuan mengikuti master jenis pekerjaan; payload lama tetap diterima.
+            'satuan' => ['nullable', 'string', 'max:30'],
             'mulai' => ['nullable', 'date'],
             'selesai' => ['nullable', 'date'],
             'assignment_id' => ['nullable', 'integer', 'exists:assignments,id'],
@@ -130,7 +129,6 @@ class PreviewAssignmentRequest extends FormRequest
             'volume.required' => 'Volume pekerjaan wajib diisi.',
             'volume.numeric' => 'Volume penugasan harus berupa angka.',
             'volume.min' => 'Volume penugasan minimal 0.01.',
-            'satuan.in' => 'Satuan penugasan tidak valid.',
         ];
     }
 }

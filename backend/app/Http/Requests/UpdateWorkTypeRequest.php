@@ -23,7 +23,7 @@ class UpdateWorkTypeRequest extends FormRequest
         return [
             'nama' => ['sometimes', 'required', 'string', 'max:120', Rule::unique('work_types', 'nama')->ignore($workTypeId)],
             'satuan' => ['sometimes', 'required', 'string', 'max:30'],
-            'norma_menit' => ['sometimes', 'required', 'integer', 'min:1', 'max:100000'],
+            'norma_menit' => ['sometimes', 'required', 'integer', 'min:1', 'max:65535'],
             'jenis_norma' => ['sometimes', 'required', 'string', 'in:estimasi,standar'],
             'sumber' => ['nullable', 'string', 'max:255'],
             'aktif' => ['sometimes', 'boolean'],
@@ -42,6 +42,7 @@ class UpdateWorkTypeRequest extends FormRequest
             'norma_menit.required' => 'Norma waktu wajib diisi.',
             'norma_menit.integer' => 'Norma waktu harus berupa bilangan bulat (menit).',
             'norma_menit.min' => 'Norma waktu minimal 1 menit.',
+            'norma_menit.max' => 'Norma waktu maksimal 65.535 menit sesuai kapasitas penyimpanan.',
             'jenis_norma.in' => 'Jenis norma harus estimasi atau standar.',
         ];
     }

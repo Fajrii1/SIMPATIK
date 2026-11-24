@@ -404,36 +404,42 @@ export function buildEmployeeConflicts(events: CalendarEvent[], year: number): E
   );
 }
 
-/** Jumlah hari kerja (Senin-Jumat) dalam rentang inklusif. */
-function countWeekdays(startIso: string, endIso: string): number {
+/** Jumlah hari kerja (Senin-Jumat, di luar hari libur) dalam rentang inklusif. */
+function countWeekdays(startIso: string, endIso: string, holidays: string[] = []): number {
   let count = 0;
+  const holidaySet = new Set(holidays);
   const cursor = parseIsoDate(startIso);
   const end = parseIsoDate(endIso);
 
   while (cursor <= end) {
     const day = cursor.getDay();
-    if (day !== 0 && day !== 6) count += 1;
+    if (day !== 0 && day !== 6 && !holidaySet.has(toIsoDate(cursor))) count += 1;
     cursor.setDate(cursor.getDate() + 1);
   }
 
   return count;
 }
 
-/** Kapasitas jam kerja satu bulan berdasarkan jumlah hari kerja di bulan tersebut. */
-function monthCapacityHours(monthKey: string, jamKerjaPerHari: number): number {
+/** Kapasitas jam kerja satu bulan berdasarkan jumlah hari kerja efektif di bulan tersebut. */
+function monthCapacityHours(
+  monthKey: string,
+  jamKerjaPerHari: number,
+  holidays: string[] = []
+): number {
   const [year, month] = monthKey.split('-').map(Number);
   const start = buildIsoDate(year, month - 1, 1);
   const end = buildIsoDate(year, month - 1, getMonthLength(year, month - 1));
-  return countWeekdays(start, end) * jamKerjaPerHari;
+  return countWeekdays(start, end, holidays) * jamKerjaPerHari;
 }
 
-/** Distribusi jam beban bulanan penugasan secara proporsional terhadap hari kerja. */
+/** Distribusi jam beban bulanan penugasan secara proporsional terhadap hari kerja efektif. */
 function splitHoursByMonth(
   totalHours: number,
   startIso: string,
-  endIso: string
+  endIso: string,
+  holidays: string[] = []
 ): Record<string, number> {
-  const totalDays = countWeekdays(startIso, endIso);
+  const totalDays = countWeekdays(startIso, endIso, holidays);
   if (totalDays <= 0) return {};
 
   const result: Record<string, number> = {};
@@ -448,7 +454,7 @@ function splitHoursByMonth(
     const overlapEnd = monthEnd < end ? monthEnd : end;
 
     if (overlapStart <= overlapEnd) {
-      const workdays = countWeekdays(toIsoDate(overlapStart), toIsoDate(overlapEnd));
+      const workdays = countWeekdays(toIsoDate(overlapStart), toIsoDate(overlapEnd), holidays);
       const key = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}`;
       result[key] = Math.round(totalHours * (workdays / totalDays) * 100) / 100;
     }
@@ -626,7 +632,8 @@ export function buildEmployeeSummary(
   users: User[],
   year: number,
   monthlyThreshold = 100,
-  jamKerjaPerHari = 7
+  jamKerjaPerHari = 7,
+  hariLibur: string[] = []
 ): EmployeeSummary[] {
   const userMap = new Map(users.map((user) => [user.id, user]));
   const summaries = new Map<
@@ -696,8 +703,8 @@ export function buildEmployeeSummary(
     const periodEnd = assignment.selesai || getEventInclusiveEnd(event);
     const totalHours = assignment.total_jam !== null && assignment.total_jam !== undefined
       ? assignment.total_jam
-      : (Number(assignment.jam_per_hari) || 0) * countWeekdays(periodStart, periodEnd);
-    const distribution = splitHoursByMonth(totalHours, periodStart, periodEnd);
+      : (Number(assignment.jam_per_hari) || 0) * countWeekdays(periodStart, periodEnd, hariLibur);
+    const distribution = splitHoursByMonth(totalHours, periodStart, periodEnd, hariLibur);
 
     Object.entries(distribution).forEach(([monthKey, jam]) => {
       if (!monthKey.startsWith(`${year}-`)) return;
@@ -711,7 +718,7 @@ export function buildEmployeeSummary(
     .map((summary) => {
       const peakEntry = Object.entries(summary.monthlyHours).sort(([, a], [, b]) => b - a)[0];
       const jamTerpakai = peakEntry ? peakEntry[1] : 0;
-      const capacity = peakEntry ? monthCapacityHours(peakEntry[0], jamKerjaPerHari) : 0;
+      const capacity = peakEntry ? monthCapacityHours(peakEntry[0], jamKerjaPerHari, hariLibur) : 0;
       const thresholdHours = capacity * (monthlyThreshold > 0 ? monthlyThreshold / 100 : 1);
       const persentase = thresholdHours > 0 ? (jamTerpakai / thresholdHours) * 100 : 0;
       const peakMonth = peakEntry

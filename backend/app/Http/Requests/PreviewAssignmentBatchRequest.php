@@ -2,14 +2,12 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\SatuanPenugasan;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\WorkloadService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class PreviewAssignmentBatchRequest extends FormRequest
@@ -49,7 +47,8 @@ class PreviewAssignmentBatchRequest extends FormRequest
             'assignments.*.work_type_id' => ['nullable', 'integer', 'exists:work_types,id', 'required_without:assignments.*.jam_per_hari'],
             'assignments.*.jam_per_hari' => ['nullable', 'numeric', 'min:0.25', 'max:'.(float) Setting::getVal('jam_kerja_per_hari', 7), 'required_without:assignments.*.work_type_id'],
             'assignments.*.volume' => ['required', 'numeric', 'min:0.01'],
-            'assignments.*.satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
+            // Satuan mengikuti master jenis pekerjaan; payload lama tetap diterima.
+            'assignments.*.satuan' => ['nullable', 'string', 'max:30'],
             'assignments.*.mulai' => ['nullable', 'date'],
             'assignments.*.selesai' => ['nullable', 'date', 'after_or_equal:mulai'],
         ];
@@ -151,7 +150,6 @@ class PreviewAssignmentBatchRequest extends FormRequest
             'assignments.*.work_type_id.exists' => 'Jenis pekerjaan tidak ditemukan.',
             'assignments.*.volume.required' => 'Volume pekerjaan wajib diisi.',
             'assignments.*.volume.numeric' => 'Volume penugasan harus berupa angka.',
-            'assignments.*.satuan.in' => 'Satuan penugasan tidak valid.',
         ];
     }
 }

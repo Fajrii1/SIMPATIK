@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\JenisKegiatan;
 use App\Models\Activity;
+use App\Services\WorkloadService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -80,6 +81,8 @@ class UpdateActivityRequest extends FormRequest
 
             // Validasi batas periode penugasan yang sudah ada (PRD Bagian 8.4)
             if ($activity && ($this->filled('mulai') || $this->filled('selesai'))) {
+                $workloadService = app(WorkloadService::class);
+
                 foreach ($activity->assignments as $assignment) {
                     $assignStart = $assignment->mulai ? Carbon::parse($assignment->mulai)->startOfDay() : $mulai;
                     $assignEnd = $assignment->selesai ? Carbon::parse($assignment->selesai)->startOfDay() : $selesai;
@@ -91,6 +94,11 @@ class UpdateActivityRequest extends FormRequest
 
                     if ($assignEnd && $selesai && $assignEnd->gt($selesai)) {
                         $validator->errors()->add('selesai', 'Tanggal selesai kegiatan tidak boleh lebih awal dari tanggal selesai penugasan pegawai yang sudah ada.');
+                        break;
+                    }
+
+                    if ($assignStart && $assignEnd && $workloadService->countWorkdays($assignStart, $assignEnd) === 0) {
+                        $validator->errors()->add('mulai', 'Perubahan periode kegiatan membuat penugasan pegawai tidak memiliki hari kerja efektif (Senin-Jumat, di luar hari libur).');
                         break;
                     }
                 }

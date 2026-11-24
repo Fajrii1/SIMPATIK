@@ -328,6 +328,7 @@ class WorkloadService
     {
         $daysInMonth = $monthStart->daysInMonth;
         $dailyCounts = array_fill(1, $daysInMonth, 0);
+        $holidays = $this->getHolidayDates();
 
         foreach ($assignments as $assignment) {
             $activity = $assignment->activity;
@@ -338,17 +339,7 @@ class WorkloadService
             $start = $assignment->mulai ? Carbon::parse($assignment->mulai)->startOfDay() : Carbon::parse($activity->mulai)->startOfDay();
             $end = $assignment->selesai ? Carbon::parse($assignment->selesai)->startOfDay() : Carbon::parse($activity->selesai)->startOfDay();
 
-            if ($start->lte($monthEnd) && $end->gte($monthStart)) {
-                $clampedStart = $start->gt($monthStart) ? $start : $monthStart;
-                $clampedEnd = $end->lt($monthEnd) ? $end : $monthEnd;
-
-                $startDay = (int) $clampedStart->format('j');
-                $endDay = (int) $clampedEnd->format('j');
-
-                for ($d = $startDay; $d <= $endDay; $d++) {
-                    $dailyCounts[$d]++;
-                }
-            }
+            $this->countConcurrentDays($dailyCounts, $start, $end, $monthStart, $monthEnd, $holidays);
         }
 
         return ! empty($dailyCounts) ? max($dailyCounts) : 0;
@@ -367,20 +358,13 @@ class WorkloadService
 
         $daysInMonth = $monthStart->daysInMonth;
         $dailyCounts = array_fill(1, $daysInMonth, 0);
+        $holidays = $this->getHolidayDates();
 
         foreach ($kegiatanBesarList as $activity) {
             $start = Carbon::parse($activity->mulai)->startOfDay();
             $end = Carbon::parse($activity->selesai)->startOfDay();
 
-            $clampedStart = $start->gt($monthStart) ? $start : $monthStart;
-            $clampedEnd = $end->lt($monthEnd) ? $end : $monthEnd;
-
-            $startDay = (int) $clampedStart->format('j');
-            $endDay = (int) $clampedEnd->format('j');
-
-            for ($d = $startDay; $d <= $endDay; $d++) {
-                $dailyCounts[$d]++;
-            }
+            $this->countConcurrentDays($dailyCounts, $start, $end, $monthStart, $monthEnd, $holidays);
         }
 
         return ! empty($dailyCounts) ? max($dailyCounts) : 0;
@@ -760,7 +744,7 @@ class WorkloadService
             }
             usort($excessDays, fn ($a, $b) => strcmp($a['tanggal'], $b['tanggal']));
 
-            // Concurrency simulation (semua hari, sama seperti peringatan lama).
+            // Simulasi penugasan bersamaan hanya pada hari kerja efektif.
             $dailyCounts = array_fill(1, $monthDate->daysInMonth, 0);
             foreach ($existingAssignments as $existing) {
                 $eAct = $existing->activity;
@@ -770,20 +754,10 @@ class WorkloadService
                 $eStart = $existing->mulai ? Carbon::parse($existing->mulai)->startOfDay() : Carbon::parse($eAct->mulai)->startOfDay();
                 $eEnd = $existing->selesai ? Carbon::parse($existing->selesai)->startOfDay() : Carbon::parse($eAct->selesai)->startOfDay();
 
-                if ($eStart->lte($monthEnd) && $eEnd->gte($monthStart)) {
-                    $cStart = $eStart->gt($monthStart) ? $eStart : $monthStart;
-                    $cEnd = $eEnd->lt($monthEnd) ? $eEnd : $monthEnd;
-                    for ($d = (int) $cStart->format('j'); $d <= (int) $cEnd->format('j'); $d++) {
-                        $dailyCounts[$d]++;
-                    }
-                }
+                $this->countConcurrentDays($dailyCounts, $eStart, $eEnd, $monthStart, $monthEnd, $holidays);
             }
 
-            if ($simStart->lte($simEnd)) {
-                for ($d = (int) $simStart->format('j'); $d <= (int) $simEnd->format('j'); $d++) {
-                    $dailyCounts[$d]++;
-                }
-            }
+            $this->countConcurrentDays($dailyCounts, $simStart, $simEnd, $monthStart, $monthEnd, $holidays);
 
             $concurrencyAfter = ! empty($dailyCounts) ? max($dailyCounts) : 1;
             $concurrencyBefore = $currentWorkload['penugasan_bersamaan_maks'];
@@ -959,12 +933,12 @@ class WorkloadService
                         ? Carbon::parse($existing->selesai)->startOfDay()
                         : Carbon::parse($activity->selesai)->startOfDay();
 
-                    $this->countConcurrentDays($dailyCounts, $existingStart, $existingEnd, $monthStart, $monthEnd);
+                    $this->countConcurrentDays($dailyCounts, $existingStart, $existingEnd, $monthStart, $monthEnd, $holidays);
                     $this->accumulateDailyLoad($dailyLoads, $existingStart, $existingEnd, $monthStart, $monthEnd, $this->getAssignmentDailyHours($existing), $holidays);
                 }
 
                 foreach ($userRows as $row) {
-                    $this->countConcurrentDays($dailyCounts, $row['mulai'], $row['selesai'], $monthStart, $monthEnd);
+                    $this->countConcurrentDays($dailyCounts, $row['mulai'], $row['selesai'], $monthStart, $monthEnd, $holidays);
                     $this->accumulateDailyLoad($dailyLoads, $row['mulai'], $row['selesai'], $monthStart, $monthEnd, (float) $row['_workload']['jam_per_hari'], $holidays);
                 }
 
@@ -1071,21 +1045,27 @@ class WorkloadService
     }
 
     /**
-     * Menambah hitungan penugasan bersamaan per tanggal.
+     * Menambah hitungan penugasan bersamaan pada hari kerja efektif per tanggal.
      *
      * @param  array<int, int>  $dailyCounts
+     * @param  list<string>  $holidays
      */
-    private function countConcurrentDays(array &$dailyCounts, CarbonInterface $start, CarbonInterface $end, CarbonInterface $monthStart, CarbonInterface $monthEnd): void
+    private function countConcurrentDays(array &$dailyCounts, CarbonInterface $start, CarbonInterface $end, CarbonInterface $monthStart, CarbonInterface $monthEnd, array $holidays): void
     {
         if ($start->gt($monthEnd) || $end->lt($monthStart)) {
             return;
         }
 
-        $clampedStart = $start->gt($monthStart) ? $start : $monthStart;
-        $clampedEnd = $end->lt($monthEnd) ? $end : $monthEnd;
+        $clampedStart = ($start->gt($monthStart) ? $start : $monthStart)->copy()->startOfDay();
+        $clampedEnd = ($end->lt($monthEnd) ? $end : $monthEnd)->copy()->startOfDay();
+        $cursor = $clampedStart->copy();
 
-        for ($d = (int) $clampedStart->format('j'); $d <= (int) $clampedEnd->format('j'); $d++) {
-            $dailyCounts[$d]++;
+        while ($cursor->lte($clampedEnd)) {
+            if ($cursor->isWeekday() && ! in_array($cursor->format('Y-m-d'), $holidays, true)) {
+                $dailyCounts[(int) $cursor->format('j')]++;
+            }
+
+            $cursor->addDay();
         }
     }
 }

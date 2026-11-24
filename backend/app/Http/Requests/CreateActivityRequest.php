@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use App\Enums\JenisKegiatan;
-use App\Enums\SatuanPenugasan;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WorkType;
@@ -64,7 +63,7 @@ class CreateActivityRequest extends FormRequest
             'assignments.*.work_type_id' => ['nullable', 'integer', 'exists:work_types,id', 'required_without:assignments.*.jam_per_hari'],
             'assignments.*.jam_per_hari' => ['nullable', 'numeric', 'min:0.25', 'max:'.$maxJam, 'required_without:assignments.*.work_type_id'],
             'assignments.*.volume' => ['required', 'numeric', 'min:0.01'],
-            'assignments.*.satuan' => ['nullable', 'string', Rule::in(SatuanPenugasan::values())],
+            'assignments.*.satuan' => ['nullable', 'string', 'max:30'],
             'assignments.*.mulai' => ['nullable', 'date'],
             'assignments.*.selesai' => ['nullable', 'date', 'after_or_equal:mulai'],
         ];
@@ -223,7 +222,6 @@ class CreateActivityRequest extends FormRequest
             'assignments.*.volume.required' => 'Volume pekerjaan wajib diisi.',
             'assignments.*.volume.numeric' => 'Volume penugasan harus berupa angka.',
             'assignments.*.volume.min' => 'Volume penugasan minimal 0.01.',
-            'assignments.*.satuan.in' => 'Satuan penugasan tidak valid.',
         ];
     }
 }
