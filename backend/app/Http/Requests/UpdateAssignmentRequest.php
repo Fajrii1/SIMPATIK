@@ -101,12 +101,16 @@ class UpdateAssignmentRequest extends FormRequest
                 $validator->errors()->add('peran', 'Kegiatan wajib memiliki satu Penanggung Jawab.');
             }
 
-            // 4. jam per hari harus kelipatan 0,25 (mode lama, opsional).
-            $newJam = $this->has('jam_per_hari') ? (float) $this->input('jam_per_hari') : (float) $assignment->jam_per_hari;
-            $this->validateJamStep($validator, $newJam);
+            // 4. Jam per hari harus kelipatan 0,25 hanya bila dikirim eksplisit pada mode manual.
+            // Pada mode jenis pekerjaan + volume, jam_per_hari merupakan nilai turunan
+            // (misalnya 3,33) sehingga tidak boleh divalidasi kelipatan.
+            $newWorkTypeId = $this->has('work_type_id') ? $this->input('work_type_id') : $assignment->work_type_id;
+
+            if ($this->filled('jam_per_hari') && ($newWorkTypeId === null || $newWorkTypeId === '')) {
+                $this->validateJamStep($validator, (float) $this->input('jam_per_hari'));
+            }
 
             // 4b. Jenis pekerjaan harus aktif dan volume wajib tersedia untuk perhitungan ABK.
-            $newWorkTypeId = $this->has('work_type_id') ? $this->input('work_type_id') : $assignment->work_type_id;
 
             if ($newWorkTypeId !== null && $newWorkTypeId !== '') {
                 $workType = WorkType::find((int) $newWorkTypeId);

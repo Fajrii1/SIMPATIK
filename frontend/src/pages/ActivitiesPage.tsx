@@ -167,6 +167,10 @@ export const ActivitiesPage: React.FC = () => {
   // Hak akses tambah kegiatan: admin atau ketua tim.
   const canCreate = user?.peran === 'admin' || Boolean(user?.is_ketua);
 
+  // Aksi kegiatan hanya untuk admin atau ketua tim pemilik kegiatan.
+  const canManageActivity = (act: Activity) =>
+    user?.peran === 'admin' || Boolean(user?.led_team_ids?.includes(act.team_id));
+
   // Peran PJ tidak diubah dari form ini agar kegiatan tetap memiliki tepat satu PJ.
   const editingIsPj = editingAssignment?.peran === PJ_ROLE;
   const assignmentRoleOptions: string[] = editingIsPj ? [PJ_ROLE] : [...ASSIGNMENT_ROLE_OPTIONS];
@@ -571,12 +575,16 @@ export const ActivitiesPage: React.FC = () => {
                         {act.mulai} s.d. {act.selesai}
                       </td>
                       <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenAssignments(act)}
-                          className="text-xs font-semibold text-sky-600 hover:text-sky-800 underline underline-offset-2"
-                        >
-                          {act.assignments_count || 0} orang
-                        </button>
+                        {canManageActivity(act) ? (
+                          <button
+                            onClick={() => handleOpenAssignments(act)}
+                            className="text-xs font-semibold text-sky-600 hover:text-sky-800 underline underline-offset-2"
+                          >
+                            {act.assignments_count || 0} orang
+                          </button>
+                        ) : (
+                          <span className="text-xs">{act.assignments_count || 0} orang</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span
@@ -594,15 +602,15 @@ export const ActivitiesPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenAssignments(act)}
-                          title="Kelola Penugasan"
-                          className="p-1.5 text-slate-400 hover:text-sky-600 rounded transition"
-                        >
-                          <UserCheck className="w-4 h-4 inline" />
-                        </button>
-                        {canCreate && (
+                        {canManageActivity(act) && (
                           <>
+                            <button
+                              onClick={() => handleOpenAssignments(act)}
+                              title="Kelola Penugasan"
+                              className="p-1.5 text-slate-400 hover:text-sky-600 rounded transition"
+                            >
+                              <UserCheck className="w-4 h-4 inline" />
+                            </button>
                             <button
                               onClick={() => handleOpenEdit(act)}
                               title="Edit Kegiatan"
@@ -617,24 +625,24 @@ export const ActivitiesPage: React.FC = () => {
                             >
                               <Trash2 className="w-4 h-4 inline" />
                             </button>
+                            {act.status === 'Selesai' ? (
+                              <button
+                                onClick={() => handleToggleComplete(act)}
+                                className="p-1.5 text-amber-600 hover:text-amber-700 rounded transition"
+                                title="Buka Kembali"
+                              >
+                                <RotateCcw className="w-4 h-4 inline" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setCompletingActivity(act)}
+                                className="p-1.5 text-emerald-600 hover:text-emerald-700 rounded transition"
+                                title="Selesaikan Kegiatan"
+                              >
+                                <CheckCircle className="w-4 h-4 inline" />
+                              </button>
+                            )}
                           </>
-                        )}
-                        {act.status === 'Selesai' ? (
-                          <button
-                            onClick={() => handleToggleComplete(act)}
-                            className="p-1.5 text-amber-600 hover:text-amber-700 rounded transition"
-                            title="Buka Kembali"
-                          >
-                            <RotateCcw className="w-4 h-4 inline" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setCompletingActivity(act)}
-                            className="p-1.5 text-emerald-600 hover:text-emerald-700 rounded transition"
-                            title="Selesaikan Kegiatan"
-                          >
-                            <CheckCircle className="w-4 h-4 inline" />
-                          </button>
                         )}
                       </td>
                     </tr>
@@ -670,30 +678,30 @@ export const ActivitiesPage: React.FC = () => {
                     <span>Petugas: <strong>{act.assignments_count || 0}</strong> org</span>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => handleOpenAssignments(act)}
-                      className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 min-h-[36px]"
-                    >
-                      <UserCheck className="w-3.5 h-3.5" /> Kelola Tugas
-                    </button>
-                    <div className="flex items-center gap-1">
-                      {canCreate && (
+                  {canManageActivity(act) && (
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => handleOpenAssignments(act)}
+                        className="text-xs font-semibold text-sky-600 hover:text-sky-700 flex items-center gap-1 min-h-[36px]"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" /> Kelola Tugas
+                      </button>
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleOpenEdit(act)}
                           className="p-2 text-slate-500 hover:text-amber-600 min-h-[36px] min-w-[36px]"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                      )}
-                      <button
-                        onClick={() => act.status === 'Selesai' ? handleToggleComplete(act) : setCompletingActivity(act)}
-                        className={`p-2 min-h-[36px] min-w-[36px] ${act.status === 'Selesai' ? 'text-amber-600' : 'text-emerald-600'}`}
-                      >
-                        {act.status === 'Selesai' ? <RotateCcw className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                      </button>
+                        <button
+                          onClick={() => act.status === 'Selesai' ? handleToggleComplete(act) : setCompletingActivity(act)}
+                          className={`p-2 min-h-[36px] min-w-[36px] ${act.status === 'Selesai' ? 'text-amber-600' : 'text-emerald-600'}`}
+                        >
+                          {act.status === 'Selesai' ? <RotateCcw className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

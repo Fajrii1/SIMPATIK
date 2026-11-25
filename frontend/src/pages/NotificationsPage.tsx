@@ -1,17 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { Bell, CheckCheck, Loader2 } from 'lucide-react';
-import { NotificationItem } from '../types';
+import { NotificationItem, PageMeta } from '../types';
+import { Pagination } from '../components/Pagination';
 
 export const NotificationsPage: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
 
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/notifications');
+      const res = await api.get('/notifications', {
+        params: {
+          unread: unreadOnly ? 1 : undefined,
+          page,
+          per_page: 10,
+        },
+      });
       setNotifications(res.data.data);
+      setMeta(res.data.meta ?? null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -21,7 +32,8 @@ export const NotificationsPage: React.FC = () => {
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadOnly, page]);
 
   const handleMarkAsRead = async (id: number) => {
     try {
@@ -56,6 +68,22 @@ export const NotificationsPage: React.FC = () => {
             <CheckCheck className="w-4 h-4" /> Tandai Semua Dibaca
           </button>
         )}
+      </div>
+
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+        <label htmlFor="notification-filter" className="sr-only">Filter notifikasi</label>
+        <select
+          id="notification-filter"
+          value={unreadOnly ? 'unread' : 'all'}
+          onChange={(e) => {
+            setUnreadOnly(e.target.value === 'unread');
+            setPage(1);
+          }}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
+        >
+          <option value="all">Semua Notifikasi</option>
+          <option value="unread">Belum Dibaca</option>
+        </select>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
@@ -105,6 +133,8 @@ export const NotificationsPage: React.FC = () => {
           ))
         )}
       </div>
+
+      <Pagination meta={meta} onPageChange={setPage} disabled={loading} label="notifikasi" />
     </div>
   );
 };

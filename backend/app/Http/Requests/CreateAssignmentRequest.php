@@ -91,8 +91,9 @@ class CreateAssignmentRequest extends FormRequest
                 }
             }
 
-            // 3. jam per hari harus kelipatan 0,25 (mode lama, opsional).
-            if ($this->filled('jam_per_hari')) {
+            // 3. jam per hari harus kelipatan 0,25 hanya untuk input manual eksplisit.
+            // Mode jenis pekerjaan + volume memakai jam turunan, jadi tidak divalidasi kelipatan.
+            if ($this->filled('jam_per_hari') && ! $this->filled('work_type_id')) {
                 $this->validateJamStep($validator, 'jam_per_hari', (float) $this->input('jam_per_hari'));
             }
 

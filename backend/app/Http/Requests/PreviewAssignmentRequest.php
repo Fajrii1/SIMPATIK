@@ -71,7 +71,8 @@ class PreviewAssignmentRequest extends FormRequest
                 }
             }
 
-            if ($this->filled('jam_per_hari')) {
+            // Validasi kelipatan hanya untuk input manual, bukan jam turunan mode volume.
+            if ($this->filled('jam_per_hari') && ! $this->filled('work_type_id')) {
                 $value = (float) $this->input('jam_per_hari');
                 $steps = $value / 0.25;
 

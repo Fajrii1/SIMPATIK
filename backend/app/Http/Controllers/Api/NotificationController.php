@@ -22,7 +22,14 @@ class NotificationController extends Controller
 
         $perPage = min(max($request->integer('per_page', 10), 1), 50);
 
-        $notifications = Notification::where('user_id', $user->id)
+        $query = Notification::where('user_id', $user->id);
+
+        // Filter hanya notifikasi yang belum dibaca.
+        if ($request->boolean('unread')) {
+            $query->unread();
+        }
+
+        $notifications = $query
             ->orderByDesc('id')
             ->paginate($perPage);
 

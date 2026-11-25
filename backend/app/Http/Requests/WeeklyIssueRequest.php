@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Activity;
 use App\Models\Setting;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -66,7 +67,7 @@ class WeeklyIssueRequest extends FormRequest
         if ($this->filled('bulan')) {
             try {
                 $this->merge([
-                    'bulan' => \Carbon\Carbon::parse($this->input('bulan'))->startOfMonth()->toDateString(),
+                    'bulan' => Carbon::parse($this->input('bulan'))->startOfMonth()->toDateString(),
                 ]);
             } catch (\Throwable) {
                 // Biarkan validasi tanggal menangani nilai yang tidak valid.

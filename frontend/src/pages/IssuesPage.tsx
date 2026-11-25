@@ -10,9 +10,11 @@ import {
   Pencil,
   Trash2,
   Settings2,
+  Search,
 } from 'lucide-react';
-import { WeeklyIssue, WeeklyIssueHistory, Team, Activity, User } from '../types';
+import { WeeklyIssue, WeeklyIssueHistory, Team, Activity, User, PageMeta } from '../types';
 import { getApiErrorMessage } from '../services/errors';
+import { Pagination } from '../components/Pagination';
 
 type ActivityOption = Pick<Activity, 'id' | 'nama'>;
 type PicOption = Pick<User, 'id' | 'nama' | 'nip' | 'aktif'>;
@@ -66,6 +68,9 @@ export const IssuesPage: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [search, setSearch] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -206,6 +211,9 @@ export const IssuesPage: React.FC = () => {
           params: {
             team_id: selectedTeam || undefined,
             status: selectedStatus || undefined,
+            search: search || undefined,
+            page,
+            per_page: 10,
           },
         }),
         api.get('/issues/carried', {
@@ -215,6 +223,7 @@ export const IssuesPage: React.FC = () => {
         }),
       ]);
       setIssues(issueRes.data?.data ?? []);
+      setMeta(issueRes.data?.meta ?? null);
       setCarriedIssues(carriedRes.data?.data ?? []);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Gagal memuat data kendala bulanan.'));
@@ -262,7 +271,7 @@ export const IssuesPage: React.FC = () => {
   useEffect(() => {
     fetchIssues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTeam, selectedStatus]);
+  }, [selectedTeam, selectedStatus, search, page]);
 
   useEffect(() => {
     if (!idParam) {
@@ -680,7 +689,7 @@ export const IssuesPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Kendala Minggu Mulaian & Solusi</h1>
+          <h1 className="text-xl font-bold text-slate-900">Kendala Bulanan & Solusi</h1>
           <p className="text-sm text-slate-500">
             Pencatatan hambatan lapangan, eskalasi ke pimpinan, dan pemantauan tindak lanjut
           </p>
@@ -701,7 +710,7 @@ export const IssuesPage: React.FC = () => {
         <div className="bg-rose-50/70 border border-rose-200 p-5 rounded-xl space-y-3">
           <h2 className="text-sm font-bold text-rose-900 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-rose-600" />
-            Kendala Terbawa Dari Minggu Sebelumnya ({carriedIssues.length} Belum Selesai)
+            Kendala Terbawa Dari Bulan Sebelumnya ({carriedIssues.length} Belum Selesai)
           </h2>
           <div className="space-y-2">
             {carriedIssues.map((ci) => (
@@ -728,9 +737,27 @@ export const IssuesPage: React.FC = () => {
 
       {/* Filter and Search */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Cari kendala, solusi, atau tim..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Cari kendala"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-600"
+          />
+        </div>
+
         <select
           value={selectedTeam}
-          onChange={(e) => setSelectedTeam(e.target.value)}
+          onChange={(e) => {
+            setSelectedTeam(e.target.value);
+            setPage(1);
+          }}
           className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600"
           aria-label="Filter tim"
         >
@@ -742,7 +769,10 @@ export const IssuesPage: React.FC = () => {
 
         <select
           value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
+          onChange={(e) => {
+            setSelectedStatus(e.target.value);
+            setPage(1);
+          }}
           className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600"
           aria-label="Filter status"
         >
@@ -783,7 +813,7 @@ export const IssuesPage: React.FC = () => {
                   <th className="py-3 px-4">Deskripsi Kendala</th>
                   <th className="py-3 px-4">Tim Kerja</th>
                   <th className="py-3 px-4">Pelapor</th>
-                  <th className="py-3 px-4">Minggu Mulai</th>
+                  <th className="py-3 px-4">Bulan Mulai</th>
                   <th className="py-3 px-4">Tenggat</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Aksi</th>
@@ -860,6 +890,9 @@ export const IssuesPage: React.FC = () => {
             </table>
           </div>
         )}
+        <div className="px-4 pb-3">
+          <Pagination meta={meta} onPageChange={setPage} disabled={loading} label="kendala" />
+        </div>
       </div>
 
       {/* Modal Lapor Kendala */}

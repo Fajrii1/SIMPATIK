@@ -8,6 +8,7 @@ use App\Models\Assignment;
 use App\Models\Notification;
 use App\Models\Team;
 use App\Models\User;
+use App\Models\WorkType;
 use App\Support\PeranPenugasan;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -425,6 +426,76 @@ class AssignmentManagementTest extends TestCase
         } finally {
             Assignment::where('activity_id', $activity->id)->forceDelete();
             $activity->forceDelete();
+        }
+    }
+
+    /**
+     * Regresi BUG-4: volume dapat diubah berulang kali pada mode jenis pekerjaan
+     * tanpa terhalang validasi kelipatan 0,25 dari jam_per_hari turunan.
+     */
+    public function test_update_assignment_volume_twice_ignores_derived_daily_hours_step(): void
+    {
+        $admin = User::where('email', 'admin@contoh.test')->first();
+        $pegawai = User::where('email', 'pegawai01@contoh.test')->first();
+        $team = Team::first();
+
+        $workType = WorkType::create([
+            'nama' => 'Penyuntingan Naskah Uji Volume',
+            'satuan' => 'Naskah',
+            'norma_menit' => 600,
+            'jenis_norma' => 'standar',
+            'aktif' => true,
+        ]);
+
+        // Senin sampai Rabu = tepat tiga hari kerja.
+        $activity = Activity::create([
+            'nama' => 'Kegiatan Uji Volume Berulang',
+            'jenis' => 'Survei',
+            'team_id' => $team->id,
+            'mulai' => '2026-11-02',
+            'selesai' => '2026-11-04',
+        ]);
+
+        try {
+            Sanctum::actingAs($admin);
+
+            $created = $this->postJson("/api/activities/{$activity->id}/assignments", [
+                'user_id' => $pegawai->id,
+                'peran' => 'Anggota',
+                'work_type_id' => $workType->id,
+                'volume' => 1,
+            ]);
+
+            $created->assertCreated()
+                ->assertJsonPath('data.total_menit', 600);
+
+            $assignmentId = $created->json('data.id');
+
+            // Jam per hari turunan: 600 menit / 60 / 3 hari kerja = 3,33.
+            $this->assertEqualsWithDelta(
+                3.33,
+                (float) Assignment::find($assignmentId)->jam_per_hari,
+                0.001
+            );
+
+            // Ubah volume dua kali tanpa mengirim jam_per_hari.
+            $this->putJson("/api/assignments/{$assignmentId}", [
+                'volume' => 2,
+            ])->assertOk()
+                ->assertJsonPath('data.volume', 2)
+                ->assertJsonPath('data.total_menit', 1200);
+
+            $this->putJson("/api/assignments/{$assignmentId}", [
+                'volume' => 3,
+            ])->assertOk()
+                ->assertJsonPath('data.volume', 3)
+                ->assertJsonPath('data.total_menit', 1800);
+
+            $this->assertSame(1800, (int) Assignment::find($assignmentId)->total_menit);
+        } finally {
+            Assignment::where('activity_id', $activity->id)->forceDelete();
+            $activity->forceDelete();
+            $workType->forceDelete();
         }
     }
 }

@@ -58,7 +58,7 @@ class Activity extends Model
     }
 
     /**
-     * Kendala mingguan yang terkait langsung dengan kegiatan ini.
+     * Kendala bulanan yang terkait langsung dengan kegiatan ini.
      */
     public function weeklyIssues(): HasMany
     {

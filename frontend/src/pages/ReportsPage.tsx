@@ -192,7 +192,7 @@ export const ReportsPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
               <div>
-                <label htmlFor="issuestatus-week-from" className="block text-xs font-semibold text-slate-700 mb-1">Minggu Mulai (dari)</label>
+                <label htmlFor="issuestatus-week-from" className="block text-xs font-semibold text-slate-700 mb-1">Bulan Mulai (dari)</label>
                 <input
                   id="issuestatus-week-from"
                   type="date"
@@ -202,7 +202,7 @@ export const ReportsPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label htmlFor="issuestatus-week-to" className="block text-xs font-semibold text-slate-700 mb-1">Minggu Mulai (sampai)</label>
+                <label htmlFor="issuestatus-week-to" className="block text-xs font-semibold text-slate-700 mb-1">Bulan Mulai (sampai)</label>
                 <input
                   id="issuestatus-week-to"
                   type="date"

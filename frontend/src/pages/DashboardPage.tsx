@@ -57,8 +57,7 @@ export const DashboardPage: React.FC = () => {
             Selamat Datang, {user?.nama}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Jabatan: <span className="font-medium text-slate-700">{user?.jabatan || 'Aparatur BPS'}</span> • Peran:{' '}
-            <span className="font-semibold text-sky-700 capitalize">{user?.peran}</span>
+            Jabatan: <span className="font-medium text-slate-700">{user?.jabatan || 'Aparatur BPS'}</span>
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">

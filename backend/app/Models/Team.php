@@ -52,7 +52,7 @@ class Team extends Model
     }
 
     /**
-     * Kendala mingguan yang dialami tim ini.
+     * Kendala bulanan yang dialami tim ini.
      */
     public function weeklyIssues(): HasMany
     {

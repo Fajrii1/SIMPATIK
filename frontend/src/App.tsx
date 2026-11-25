@@ -51,8 +51,10 @@ const ProtectedRoute: React.FC<{
     return <Navigate to="/" replace />;
   }
 
+  // Laporan hanya untuk admin dan ketua tim; pimpinan selalu dialihkan ke beranda.
   const canViewReports =
-    user.peran === 'admin' || user.peran === 'pimpinan' || Boolean(user.is_ketua);
+    user.peran !== 'pimpinan' &&
+    (user.peran === 'admin' || Boolean(user.is_ketua));
 
   if (reportsOnly && !canViewReports) {
     return <Navigate to="/" replace />;

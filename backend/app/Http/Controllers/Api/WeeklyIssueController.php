@@ -35,6 +35,17 @@ class WeeklyIssueController extends Controller
             $query->where('status', $request->query('status'));
         }
 
+        // Pencarian teks pada kendala, solusi, tindak lanjut, atau nama tim.
+        if ($request->filled('search')) {
+            $search = $request->string('search')->trim()->toString();
+            $query->where(function ($q) use ($search) {
+                $q->where('kendala', 'like', "%{$search}%")
+                    ->orWhere('solusi', 'like', "%{$search}%")
+                    ->orWhere('tindak_lanjut', 'like', "%{$search}%")
+                    ->orWhereHas('team', fn ($team) => $team->where('nama', 'like', "%{$search}%"));
+            });
+        }
+
         // Filter bulan: menerima format Y-m atau Y-m-d.
         if ($request->has('bulan') && ! empty($request->query('bulan'))) {
             $monthStart = Carbon::parse($request->query('bulan'))->startOfMonth()->toDateString();

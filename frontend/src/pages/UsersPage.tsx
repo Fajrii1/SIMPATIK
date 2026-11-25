@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import {
-  Users,
   Plus,
   CheckCircle,
   XCircle,
@@ -17,14 +16,19 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { User, Team } from '../types';
+import { User, Team, PageMeta } from '../types';
 import { getApiErrorMessage } from '../services/errors';
+import { Pagination } from '../components/Pagination';
 
 export const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [userOptions, setUserOptions] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [peran, setPeran] = useState('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
   const [activeTab, setActiveTab] = useState<'users' | 'teams'>('users');
   const [pageError, setPageError] = useState('');
   const [pageSuccess, setPageSuccess] = useState('');
@@ -65,12 +69,23 @@ export const UsersPage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [uRes, tRes] = await Promise.all([
-        api.get('/users', { params: { search: search || undefined, per_page: 50 } }),
+      const [uRes, tRes, optionsRes] = await Promise.all([
+        api.get('/users', {
+          params: {
+            search: search || undefined,
+            peran: peran || undefined,
+            page,
+            per_page: 10,
+          },
+        }),
         api.get('/teams'),
+        // Daftar lengkap untuk dropdown ketua tim dan tambah anggota, tidak ikut terpotong paginasi.
+        api.get('/users', { params: { per_page: 50 } }),
       ]);
       setUsers(uRes.data.data || []);
+      setMeta(uRes.data.meta ?? null);
       setTeams(tRes.data.data || []);
+      setUserOptions(optionsRes.data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -80,7 +95,8 @@ export const UsersPage: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, peran, page]);
 
   // Open Create User Modal
   const handleOpenCreateUser = () => {
@@ -335,7 +351,7 @@ export const UsersPage: React.FC = () => {
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          Daftar Pegawai ({users.length})
+          Daftar Pegawai ({meta?.total ?? users.length})
         </button>
         <button
           onClick={() => setActiveTab('teams')}
@@ -352,17 +368,34 @@ export const UsersPage: React.FC = () => {
       {/* Content for Users Tab */}
       {activeTab === 'users' && (
         <div className="space-y-4">
-          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-            <div className="relative">
+          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Cari berdasarkan nama atau NIP..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-sky-600 min-h-[40px]"
               />
             </div>
+            <select
+              value={peran}
+              onChange={(e) => {
+                setPeran(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter peran"
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-600 min-h-[40px]"
+            >
+              <option value="">Semua Peran</option>
+              <option value="pegawai">Pegawai</option>
+              <option value="pimpinan">Pimpinan</option>
+              <option value="admin">Admin</option>
+            </select>
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
@@ -504,6 +537,9 @@ export const UsersPage: React.FC = () => {
                 </div>
               </>
             )}
+            <div className="px-4 pb-3">
+              <Pagination meta={meta} onPageChange={setPage} disabled={loading} label="pegawai" />
+            </div>
           </div>
         </div>
       )}
@@ -749,7 +785,7 @@ export const UsersPage: React.FC = () => {
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 min-h-[40px]"
                 >
                   <option value="">Belum Ada Ketua</option>
-                  {users.map((u) => (
+                  {userOptions.map((u) => (
                     <option key={u.id} value={u.id}>{u.nama}</option>
                   ))}
                 </select>
@@ -807,7 +843,7 @@ export const UsersPage: React.FC = () => {
                 className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-2 min-h-[40px]"
               >
                 <option value="">Pilih Pegawai untuk Ditambahkan</option>
-                {users.map((u) => (
+                {userOptions.map((u) => (
                   <option key={u.id} value={u.id}>{u.nama} ({u.nip})</option>
                 ))}
               </select>

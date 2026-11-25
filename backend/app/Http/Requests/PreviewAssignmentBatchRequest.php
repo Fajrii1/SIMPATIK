@@ -94,7 +94,12 @@ class PreviewAssignmentBatchRequest extends FormRequest
                     );
                 }
 
-                if (isset($assignment['jam_per_hari'])) {
+                // Validasi kelipatan hanya untuk input manual, bukan jam turunan mode volume.
+                $hasWorkType = isset($assignment['work_type_id'])
+                    && $assignment['work_type_id'] !== null
+                    && $assignment['work_type_id'] !== '';
+
+                if (isset($assignment['jam_per_hari']) && ! $hasWorkType) {
                     $value = (float) $assignment['jam_per_hari'];
                     $steps = $value / 0.25;
 

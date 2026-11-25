@@ -84,7 +84,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Kendala mingguan yang dilaporkan oleh pengguna.
+     * Kendala bulanan yang dilaporkan oleh pengguna.
      */
     public function reportedIssues(): HasMany
     {
@@ -92,7 +92,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Kendala mingguan di mana pengguna ditunjuk sebagai PIC.
+     * Kendala bulanan di mana pengguna ditunjuk sebagai PIC.
      */
     public function assignedIssues(): HasMany
     {
